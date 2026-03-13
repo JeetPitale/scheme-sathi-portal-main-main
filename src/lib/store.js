@@ -37,16 +37,20 @@ function applyTheme(theme) {
 // ════════════════════════════════════════
 async function fetchUserProfile(uid) {
     try {
-        const docRef = doc(db, 'profiles', uid);
-        const docSnap = await getDoc(docRef);
+        // Add a 5-second timeout to prevent UI hang if Firestore is unreachable
+        const profilePromise = (async () => {
+            const docRef = doc(db, 'profiles', uid);
+            const docSnap = await getDoc(docRef);
+            return docSnap.exists() ? docSnap.data() : null;
+        })();
 
-        if (docSnap.exists()) {
-            return docSnap.data();
-        } else {
-            return null;
-        }
+        const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout')), 5000)
+        );
+
+        return await Promise.race([profilePromise, timeoutPromise]);
     } catch (err) {
-        if (import.meta.env.DEV) console.warn('Profile fetch warning:', err.message);
+        console.error('Profile fetch error:', err.message);
         return null;
     }
 }
