@@ -48,7 +48,14 @@ const Login = () => {
           navigate('/dashboard');
         }
       } else {
-        toast.error(result.error || 'Invalid login credentials');
+        const errorMsg = result.error || '';
+        if (errorMsg.includes('auth/invalid-credential') || errorMsg.includes('invalid-login-credentials')) {
+          toast.error('Invalid email or password. If you haven\'t created an account yet, please register first.');
+        } else if (errorMsg.includes('auth/user-not-found')) {
+          toast.error('No account found with this email. Please register.');
+        } else {
+          toast.error(errorMsg || 'Invalid login credentials');
+        }
       }
     } catch (error) {
       toast.error('An unexpected error occurred');
@@ -79,12 +86,13 @@ const Login = () => {
               <div>
                 <label className="text-sm font-medium text-foreground mb-1.5 block">Password *</label>
                 <div className="relative">
-                  <Input {...register('password')} type={showPassword ? 'text' : 'password'} placeholder="••••••••" />
-                  <button type="button" aria-label="toggle password visibility" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <Input {...register('password')} type={showPassword ? 'text' : 'password'} placeholder="••••••••" />
+                <button type="button" aria-label="toggle password visibility" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
+                </button>
                 </div>
                 {errors.password && <p className="text-sm text-destructive mt-1">{errors.password.message}</p>}
+                {!errors.password && <p className="text-[10px] text-muted-foreground mt-1">Tip: Passwords must be at least 8 characters long.</p>}
 
                 <div className="text-right mt-1.5">
                   <Link to="/forgot-password" className="text-sm text-primary hover:underline font-medium">
@@ -98,13 +106,20 @@ const Login = () => {
               </Button>
             </form>
 
-            <div className="mt-6 pt-6 border-t">
+            <div className="mt-6 pt-6 border-t space-y-4">
               <p className="text-center text-sm text-muted-foreground">
                 Don't have an account?{' '}
                 <Link to="/register" className="text-primary font-medium hover:underline">
                   Register
                 </Link>
               </p>
+              
+              <div className="bg-muted/50 p-3 rounded-lg border border-dashed text-xs text-muted-foreground">
+                <p className="font-semibold mb-1">Admin Access (Dev Only):</p>
+                <p>Email: <code className="text-primary">admin@schemesarthi.gov.in</code></p>
+                <p>Pass: <code className="text-primary">Admin@123</code></p>
+                <p className="mt-2 opacity-70">* If this account doesn't work, please <Link to="/register" className="underline">Register</Link> with these exact details to create it.</p>
+              </div>
             </div>
           </CardContent>
         </Card>
