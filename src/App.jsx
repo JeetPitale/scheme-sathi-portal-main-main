@@ -81,13 +81,15 @@ const App = () => {
   const loadApplications = useApplicationStore((s) => s.loadApplications);
   const loadNotifications = useNotificationStore((s) => s.loadNotifications);
   const loadAuditLogs = useAuditStore((s) => s.loadLogs);
-
-  /* Auth User state */
   const user = useAuthStore((s) => s.user);
+  const checkSession = useAuthStore((s) => s.checkSession);
 
   useEffect(() => {
     initTheme();
     loadSchemes();
+    
+    // Explicitly check session on mount to prevent stuck loading
+    checkSession();
 
     // Supabase onAuthStateChange listener — handles sign-in, sign-out, token refresh
     const unsubscribe = initAuthListener();
@@ -95,9 +97,8 @@ const App = () => {
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [initTheme, initAuthListener, loadSchemes]);
+  }, [initTheme, initAuthListener, loadSchemes, checkSession]);
 
-  // Load user-specific data when user is authenticated/available
   // Load user-specific data when user is authenticated/available
   useEffect(() => {
     if (user?.id) {
