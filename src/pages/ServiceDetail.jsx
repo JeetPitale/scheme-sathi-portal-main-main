@@ -137,7 +137,9 @@ const ServiceDetail = () => {
                 </span>
               )}
             </div>
-            <CardTitle className="text-2xl">{service.name}</CardTitle>
+            <CardTitle className="text-2xl">
+              {typeof service.name === 'object' ? (service.name?.en || service.name?.hi || "Service Details") : (service.name || "Untitled Service")}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Benefits Section */}
@@ -161,7 +163,9 @@ const ServiceDetail = () => {
             ) : (
               <div>
                 <h3 className="font-semibold text-foreground mb-2">{t('description')}</h3>
-                <p className="text-muted-foreground">{service.description}</p>
+                <p className="text-muted-foreground">
+                  {typeof service.description === 'object' ? "Please refer to clinical/official guidelines for full details." : (service.description || "No description provided.")}
+                </p>
               </div>
             )}
 
@@ -171,7 +175,9 @@ const ServiceDetail = () => {
                 {service.targetBeneficiaries && (
                   <div className="bg-muted/50 rounded-lg p-3">
                     <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><Users className="h-3 w-3" /> {t('targetBeneficiaries')}</p>
-                    <p className="text-sm font-medium text-foreground">{service.targetBeneficiaries}</p>
+                    <p className="text-sm font-medium text-foreground">
+                      {typeof service.targetBeneficiaries === 'object' ? "Specified Groups" : service.targetBeneficiaries}
+                    </p>
                   </div>
                 )}
                 {service.incomeLimit && (

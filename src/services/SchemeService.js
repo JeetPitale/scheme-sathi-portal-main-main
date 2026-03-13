@@ -157,48 +157,70 @@ const SchemeService = {
 
     async getById(id) {
         try {
-            const docRef = doc(db, COLLECTION, id);
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                const d = docSnap.data();
-                return { 
-                    id: docSnap.id, 
-                    ...d,
-                    name: d.name || d.scheme_name || "Untitled Scheme",
-                    status: d.status || 'active',
-                    isScheme: true,
-                    is_scheme: true,
-                    governmentLevel: d.governmentLevel || d.government_level || 'Central'
-                };
-            }
+            const fetchPromise = (async () => {
+                const docRef = doc(db, COLLECTION, id);
+                const snapshot = await getDoc(docRef);
+                if (snapshot.exists()) {
+                    const d = snapshot.data();
+                    return { 
+                        id: snapshot.id, 
+                        ...d,
+                        name: d.name || d.scheme_name || "Untitled Scheme",
+                        status: d.status || 'active',
+                        isScheme: true,
+                        is_scheme: true,
+                        governmentLevel: d.governmentLevel || d.government_level || 'Central'
+                    };
+                }
+                return null;
+            })();
+
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Firestore fetch timeout')), 5000)
+            );
+
+            const result = await Promise.race([fetchPromise, timeoutPromise]);
+            if (result) return result;
+
             // Fallback to local schemes if not in Firestore
             const local = LOCAL_SCHEMES.find(ls => ls.id === id);
             if (local) return local;
 
             return null;
         } catch (error) {
-            console.error(`SchemeService.getById(${id}) error:`, error);
-            return null;
+            console.error(`SchemeService.getById(${id}) fallback activated:`, error.message);
+            return LOCAL_SCHEMES.find(ls => ls.id === id) || null;
         }
     },
 
     async getBySlug(slug) {
         try {
-            const q = query(collection(db, COLLECTION), where('slug', '==', slug), limit(1));
-            const snapshot = await getDocs(q);
-            if (!snapshot.empty) {
-                const doc = snapshot.docs[0];
-                const d = doc.data();
-                return { 
-                    id: doc.id, 
-                    ...d,
-                    name: d.name || d.scheme_name || "Untitled Scheme",
-                    status: d.status || 'active',
-                    isScheme: true,
-                    is_scheme: true,
-                    governmentLevel: d.governmentLevel || d.government_level || 'Central'
-                };
-            }
+            const fetchPromise = (async () => {
+                const q = query(collection(db, COLLECTION), where('slug', '==', slug), limit(1));
+                const snapshot = await getDocs(q);
+                if (!snapshot.empty) {
+                    const doc = snapshot.docs[0];
+                    const d = doc.data();
+                    return { 
+                        id: doc.id, 
+                        ...d,
+                        name: d.name || d.scheme_name || "Untitled Scheme",
+                        status: d.status || 'active',
+                        isScheme: true,
+                        is_scheme: true,
+                        governmentLevel: d.governmentLevel || d.government_level || 'Central'
+                    };
+                }
+                return null;
+            })();
+
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Firestore fetch timeout')), 5000)
+            );
+
+            const result = await Promise.race([fetchPromise, timeoutPromise]);
+            if (result) return result;
+
             // Fallback: search by generated slug from name or scheme_name if direct slug match fails
             const all = await this.getAll();
             return all.find(s => 
@@ -207,8 +229,13 @@ const SchemeService = {
                 (s.scheme_name && s.scheme_name.toLowerCase().replace(/[^a-z0-9]+/g, '-') === slug)
             ) || null;
         } catch (error) {
-            console.error(`SchemeService.getBySlug(${slug}) error:`, error);
-            return null;
+            console.error(`SchemeService.getBySlug(${slug}) fallback activated:`, error.message);
+            // On timeout, we must use local data
+            const all = await this.getAll(); // This already handles fallback/timeout
+            return all.find(s => 
+                s.slug === slug || 
+                (s.name && (s.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-') === slug)
+            ) || null;
         }
     },
 

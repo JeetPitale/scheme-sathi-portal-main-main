@@ -157,7 +157,9 @@ const SchemeDetail = () => {
                                 </span>
                             )}
                         </div>
-                        <CardTitle className="text-2xl">{scheme.name}</CardTitle>
+                        <CardTitle className="text-2xl">
+                            {typeof scheme.name === 'object' ? (scheme.name?.en || scheme.name?.hi || "Scheme Details") : (scheme.name || "Untitled Scheme")}
+                        </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-6">
                         {/* Benefits Section */}
@@ -183,7 +185,9 @@ const SchemeDetail = () => {
                         ) : (
                             <div>
                                 <h3 className="font-semibold text-foreground mb-2">{t('description')}</h3>
-                                <p className="text-muted-foreground">{scheme.description}</p>
+                                <p className="text-muted-foreground">
+                                    {typeof scheme.description === 'object' ? "Please refer to the official guidelines for full description." : (scheme.description || "No description provided.")}
+                                </p>
                             </div>
                         )}
 
@@ -192,13 +196,19 @@ const SchemeDetail = () => {
                             {scheme.target_beneficiaries && (
                                 <div className="bg-muted/50 rounded-lg p-3">
                                     <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><Users className="h-3 w-3" /> {t('targetBeneficiaries')}</p>
-                                    <p className="text-sm font-medium text-foreground">{scheme.target_beneficiaries}</p>
+                                    <p className="text-sm font-medium text-foreground">
+                                        {typeof scheme.target_beneficiaries === 'object' ? "Specified Groups" : scheme.target_beneficiaries}
+                                    </p>
                                 </div>
                             )}
                             {scheme.eligibility && (
                                 <div className="bg-muted/50 rounded-lg p-3">
                                     <p className="text-xs text-muted-foreground mb-1 font-bold">{t('eligibility')}</p>
-                                    <p className="text-sm font-medium text-foreground">{scheme.eligibility}</p>
+                                    <p className="text-sm font-medium text-foreground">
+                                        {typeof scheme.eligibility === 'object' 
+                                            ? `Age: ${scheme.eligibility.minAge || 0}+, Categories: ${(scheme.eligibility.categories || []).join(', ')}`
+                                            : scheme.eligibility}
+                                    </p>
                                 </div>
                             )}
                         </div>
