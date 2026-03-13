@@ -308,6 +308,9 @@ export const useAuthStore = create()(persist((set, get) => ({
     name: 'scheme-sarthi-auth',
     partialize: (state) => ({
         language: state.language,
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
+        session: state.session,
     }),
 }));
 

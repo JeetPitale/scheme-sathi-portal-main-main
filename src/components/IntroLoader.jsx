@@ -27,19 +27,19 @@ const IntroLoader = ({ onComplete }) => {
         }, 4500);
 
         const sequence = async () => {
-            await new Promise(r => setTimeout(r, 800));
+            await new Promise(r => setTimeout(r, 400));
             setStage(1); // Gujarati
 
-            await new Promise(r => setTimeout(r, 800));
+            await new Promise(r => setTimeout(r, 400));
             setStage(2); // Hindi
 
-            await new Promise(r => setTimeout(r, 800));
+            await new Promise(r => setTimeout(r, 400));
             setStage(3); // English Final
 
-            await new Promise(r => setTimeout(r, 1000));
+            await new Promise(r => setTimeout(r, 600));
             setIsExiting(true);
 
-            await new Promise(r => setTimeout(r, 600));
+            await new Promise(r => setTimeout(r, 400));
             setIsVisible(false);
             onComplete();
             clearTimeout(failsafeTimeout);
