@@ -62,14 +62,16 @@ const AdminSchemes = () => {
         setShowModal(true);
     };
 
-    const handleSave = () => {
+    const [isSeeding, setIsSeeding] = useState(false);
+
+    const handleSave = async () => {
         if (!formData.name.trim() || !formData.description.trim()) {
             toast.error('Name and description are required');
             return;
         }
 
         if (editId) {
-            const result = updateScheme(editId, formData);
+            const result = await updateScheme(editId, formData);
             if (result.success) {
                 toast.success('Scheme updated');
                 addLog(`Scheme updated: ${formData.name}`);
@@ -77,7 +79,7 @@ const AdminSchemes = () => {
                 toast.error(result.error);
             }
         } else {
-            const result = addScheme(formData);
+            const result = await addScheme(formData);
             if (result.success) {
                 toast.success('Scheme added');
                 addLog(`Scheme added: ${formData.name}`);
@@ -88,20 +90,93 @@ const AdminSchemes = () => {
         setShowModal(false);
     };
 
-    const handleDelete = (scheme) => {
+    const handleDelete = async (scheme) => {
         if (!confirm(`Delete "${scheme.name}"?`)) return;
-        const result = removeScheme(scheme.id);
+        const result = await removeScheme(scheme.id);
         if (result.success) {
             toast.success('Scheme deleted');
             addLog(`Scheme deleted: ${scheme.name}`);
         }
     };
 
-    const handleToggle = (scheme) => {
-        const result = toggleSchemeStatus(scheme.id);
+    const handleToggle = async (scheme) => {
+        const result = await toggleSchemeStatus(scheme.id);
         if (result.success) {
             toast.success(`Scheme ${scheme.status === 'active' ? 'deactivated' : 'activated'}`);
             addLog(`Scheme toggled: ${scheme.name}`);
+        }
+    };
+
+    const handleSeed = async () => {
+        if (!confirm('This will seed the database with initial schemes from the local file. Continue?')) return;
+        
+        setIsSeeding(true);
+        let successCount = 0;
+        try {
+            const data = await import('@/data/schemes.json');
+            const schemesList = data.default || data;
+            
+            toast.info(`Starting seeding of ${schemesList.length} schemes...`);
+            
+            // Helper parsers
+            const parseIncome = (str) => {
+                if (!str) return null;
+                const num = str.replace(/[^0-9]/g, '');
+                return num ? parseInt(num) : null;
+            };
+
+            const parseAge = (str) => {
+                if (!str) return {};
+                const nums = str.match(/\d+/g);
+                if (!nums) return {};
+                const lower = str.toLowerCase();
+                if (lower.includes('above') || lower.includes('minimum') || lower.includes('over')) {
+                    return { minAge: parseInt(nums[0]) };
+                }
+                if (lower.includes('below') || lower.includes('maximum') || lower.includes('under')) {
+                    return { maxAge: parseInt(nums[0]) };
+                }
+                if (nums.length >= 2) {
+                    return { minAge: parseInt(nums[0]), maxAge: parseInt(nums[1]) };
+                }
+                return { minAge: parseInt(nums[0]) };
+            };
+            
+            for (const s of schemesList) {
+                const mapped = {
+                    name: s.scheme_name,
+                    description: s.application_process_summary || s.description || "No description available",
+                    category: s.category.toLowerCase().replace(/ /g, '-').replace('&', 'and'),
+                    state: s.state === 'All India' ? 'central' : s.state.toLowerCase().replace(/ /g, '-'),
+                    government_level: s.government_level,
+                    application_process: s.application_process_summary,
+                    target_beneficiaries: s.target_beneficiaries,
+                    eligibility: {
+                        ...parseAge(s.age_criteria),
+                        maxIncome: parseIncome(s.income_limit),
+                        categories: [s.category],
+                        states: [s.state === 'All India' ? 'central' : s.state.toLowerCase().replace(/ /g, '-')]
+                    },
+                    benefits: {
+                        financial_assistance: s.benefits.financial_assistance,
+                        non_financial_support: s.benefits.non_financial_support
+                    },
+                    documents_required: s.required_documents,
+                    slug: s.scheme_name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+                    status: 'active',
+                    is_featured: (s.priority_score || 0) > 8,
+                    created_at: new Date().toISOString()
+                };
+                
+                const res = await addScheme(mapped);
+                if (res.success) successCount++;
+            }
+            toast.success(`Successfully seeded ${successCount} schemes!`);
+        } catch (err) {
+            toast.error('Seeding failed: ' + err.message);
+            console.error(err);
+        } finally {
+            setIsSeeding(false);
         }
     };
 
@@ -110,11 +185,22 @@ const AdminSchemes = () => {
             <div className="admin-page">
                 <div className="flex items-center justify-between mb-4">
                     <h1 className="admin-page-title mb-0">Schemes ({schemes.length})</h1>
-                    {canAdd && (
-                        <button onClick={openAdd} className="admin-btn admin-btn-primary">
-                            <Plus className="h-4 w-4 mr-1" /> Add Scheme
-                        </button>
-                    )}
+                    <div className="flex gap-2">
+                        {canAdd && (
+                            <button 
+                                onClick={handleSeed} 
+                                disabled={isSeeding}
+                                className="admin-btn border border-primary text-primary hover:bg-primary/5"
+                            >
+                                {isSeeding ? 'Seeding...' : 'Seed from JSON'}
+                            </button>
+                        )}
+                        {canAdd && (
+                            <button onClick={openAdd} className="admin-btn admin-btn-primary">
+                                <Plus className="h-4 w-4 mr-1" /> Add Scheme
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 <div className="flex flex-wrap gap-3 mb-4">

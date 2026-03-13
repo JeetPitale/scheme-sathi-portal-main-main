@@ -44,9 +44,22 @@ const SchemeService = {
         if (isCacheValid()) return _cache;
 
         try {
-            const q = query(collection(db, COLLECTION), orderBy('name', 'asc'));
+            // Remove orderBy('name') to ensure documents missing the field are still returned
+            const q = query(collection(db, COLLECTION));
             const snapshot = await getDocs(q);
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const data = snapshot.docs.map(doc => {
+                const d = doc.data();
+                return { 
+                    id: doc.id, 
+                    ...d,
+                    // Map legacy field names if needed
+                    name: d.name || d.scheme_name || "Untitled Scheme",
+                    status: d.status || 'active'
+                };
+            });
+
+            // Sort in memory
+            data.sort((a, b) => a.name.localeCompare(b.name));
 
             _cache = data;
             _cacheTimestamp = Date.now();
@@ -58,22 +71,8 @@ const SchemeService = {
     },
 
     async getAllActive() {
-        if (isCacheValid()) {
-            return _cache.filter(s => s.status === 'active');
-        }
-
-        try {
-            const q = query(
-                collection(db, COLLECTION),
-                where('status', '==', 'active'),
-                orderBy('name', 'asc')
-            );
-            const snapshot = await getDocs(q);
-            return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        } catch (error) {
-            console.error('SchemeService.getAllActive error:', error);
-            return [];
-        }
+        const all = await this.getAll();
+        return all.filter(s => s.status === 'active');
     },
 
     async getById(id) {
@@ -81,7 +80,13 @@ const SchemeService = {
             const docRef = doc(db, COLLECTION, id);
             const docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
-                return { id: docSnap.id, ...docSnap.data() };
+                const d = docSnap.data();
+                return { 
+                    id: docSnap.id, 
+                    ...d,
+                    name: d.name || d.scheme_name || "Untitled Scheme",
+                    status: d.status || 'active'
+                };
             }
             return null;
         } catch (error) {
@@ -96,9 +101,21 @@ const SchemeService = {
             const snapshot = await getDocs(q);
             if (!snapshot.empty) {
                 const doc = snapshot.docs[0];
-                return { id: doc.id, ...doc.data() };
+                const d = doc.data();
+                return { 
+                    id: doc.id, 
+                    ...d,
+                    name: d.name || d.scheme_name || "Untitled Scheme",
+                    status: d.status || 'active'
+                };
             }
-            return null;
+            // Fallback: search by generated slug from name or scheme_name if direct slug match fails
+            const all = await this.getAll();
+            return all.find(s => 
+                s.slug === slug || 
+                (s.name && s.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') === slug) ||
+                (s.scheme_name && s.scheme_name.toLowerCase().replace(/[^a-z0-9]+/g, '-') === slug)
+            ) || null;
         } catch (error) {
             console.error(`SchemeService.getBySlug(${slug}) error:`, error);
             return null;
@@ -106,25 +123,16 @@ const SchemeService = {
     },
 
     async getFeatured(limitCount = 6) {
-        try {
-            const q = query(
-                collection(db, COLLECTION),
-                where('is_featured', '==', true),
-                where('status', '==', 'active'),
-                limit(limitCount)
-            );
-            const snapshot = await getDocs(q);
-            return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        } catch (error) {
-            console.error('SchemeService.getFeatured error:', error);
-            return [];
-        }
+        const all = await this.getAllActive();
+        return all.filter(s => s.is_featured === true).slice(0, limitCount);
     },
 
     async add(schemeData) {
         try {
+            const slug = schemeData.slug || (schemeData.name || schemeData.scheme_name || "").toLowerCase().replace(/[^a-z0-9]+/g, '-');
             const newScheme = {
                 ...schemeData,
+                slug,
                 status: schemeData.status || 'active',
                 created_at: serverTimestamp(),
                 updated_at: serverTimestamp()
@@ -176,18 +184,11 @@ const SchemeService = {
 
     async search(queryStr, page = 1, pageSize = 12) {
         try {
-            // Note: Cloud Firestore does not support native full-text search or ilike
-            // For small datasets, we fetch all active and filter in memory
-            const q = query(
-                collection(db, COLLECTION),
-                where('status', '==', 'active'),
-                orderBy('name', 'asc')
-            );
-            const snapshot = await getDocs(q);
-            const allActive = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const all = await this.getAllActive();
             
-            const filtered = allActive.filter(s => 
+            const filtered = all.filter(s => 
                 (s.name || '').toLowerCase().includes(queryStr.toLowerCase()) ||
+                (s.scheme_name || '').toLowerCase().includes(queryStr.toLowerCase()) ||
                 (s.description || '').toLowerCase().includes(queryStr.toLowerCase()) ||
                 (s.category || '').toLowerCase().includes(queryStr.toLowerCase())
             );
@@ -204,27 +205,32 @@ const SchemeService = {
 
     async filter(filters, page = 1, pageSize = 12) {
         try {
-            let q = query(collection(db, COLLECTION));
+            const all = await this.getAll();
+            
+            let filtered = all;
 
-            if (filters.category) q = query(q, where('category', '==', filters.category));
-            if (filters.state) {
-                if (filters.state !== 'central') {
-                    q = query(q, or(where('state', '==', filters.state), where('state', '==', 'central')));
-                } else {
-                    q = query(q, where('state', '==', 'central'));
-                }
+            if (filters.category) {
+                filtered = filtered.filter(s => s.category === filters.category);
             }
-            if (filters.status) q = query(q, where('status', '==', filters.status));
-
-            q = query(q, orderBy('name', 'asc'));
-
-            const snapshot = await getDocs(q);
-            const allFiltered = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            if (filters.state) {
+                filtered = filtered.filter(s => {
+                    if (filters.state === 'central') return s.state === 'central';
+                    return s.state === filters.state || s.state === 'central';
+                });
+            }
+            
+            if (filters.status) {
+                filtered = filtered.filter(s => s.status === filters.status);
+            } else {
+                // Default to showing active if filtered (active status might be missing on some docs)
+                // Actually if no status filter, just show all
+            }
 
             const start = (page - 1) * pageSize;
-            const paginated = allFiltered.slice(start, start + pageSize);
+            const paginated = filtered.slice(start, start + pageSize);
 
-            return { data: paginated, count: allFiltered.length };
+            return { data: paginated, count: filtered.length };
         } catch (error) {
             console.error('SchemeService.filter error:', error);
             return { data: [], count: 0 };
