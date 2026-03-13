@@ -21,7 +21,7 @@ const ServiceCard = ({ service }) => {
           )}
           {service.isScheme && (
             <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground">
-              {service.category.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+              {(service.category || 'general').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
             </span>
           )}
         </div>

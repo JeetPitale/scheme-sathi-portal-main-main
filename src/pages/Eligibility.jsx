@@ -132,14 +132,14 @@ const Eligibility = () => {
                                                 <div className="space-y-1">
                                                     <div className="flex items-center gap-3 flex-wrap">
                                                         <CardTitle className="text-2xl font-bold group-hover:text-primary transition-colors">
-                                                            {scheme.name}
+                                                            {typeof scheme.name === 'object' ? "Scheme Details" : (scheme.name || "Unnamed Scheme")}
                                                         </CardTitle>
                                                         <Badge className="bg-green-600 hover:bg-green-700 text-white shadow-sm">
                                                             {scheme.relevanceScore}% Match
                                                         </Badge>
                                                     </div>
                                                     <CardDescription className="text-base line-clamp-2 mt-2 leading-relaxed">
-                                                        {scheme.description}
+                                                        {typeof scheme.description === 'object' ? "Check details for more information." : (scheme.description || "No description available.")}
                                                     </CardDescription>
                                                 </div>
                                                 <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center shrink-0">
@@ -167,7 +167,9 @@ const Eligibility = () => {
                                                 <div className="text-sm">
                                                     <span className="text-slate-400 font-medium uppercase tracking-wider text-[10px] block mb-1">Primary Benefit</span>
                                                     <p className="text-slate-700 font-medium line-clamp-1 italic">
-                                                        {scheme.benefits || "Consult scheme guidelines for full list of benefits"}
+                                                        {typeof scheme.benefits === 'object' 
+                                                            ? (scheme.benefits.financial_assistance || scheme.benefits.non_financial_support || "Check details for benefits")
+                                                            : (scheme.benefits || "Consult scheme guidelines for full list of benefits")}
                                                     </p>
                                                 </div>
                                                 <Button size="lg" 

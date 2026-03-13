@@ -37,7 +37,7 @@ const LOCAL_SCHEMES = [
             financial_assistance: 'Interest on deposit, Accidental insurance cover of Rs.1 lakh, no minimum balance required.',
             non_financial_support: 'Access to pension and insurance products.'
         },
-        eligibility: { minAge: 10, categories: ['General', 'OBC', 'SC', 'ST'] },
+        eligibility: { minAge: 10, categories: ['Any', 'General', 'OBC', 'SC', 'ST'] },
         documents_required: ['Aadhaar Card', 'PAN Card', 'Voter ID', 'Driving License']
     },
     {
@@ -55,7 +55,7 @@ const LOCAL_SCHEMES = [
             financial_assistance: 'Guaranteed minimum pension of Rs. 1,000 to Rs. 5,000 per month after age 60.',
             non_financial_support: 'Social security for old age.'
         },
-        eligibility: { minAge: 18, maxAge: 40, categories: ['General', 'OBC', 'SC', 'ST'] },
+        eligibility: { minAge: 18, maxAge: 60, categories: ['Any', 'General', 'OBC', 'SC', 'ST'] },
         documents_required: ['Aadhaar Card', 'Savings Bank Account']
     },
     {
@@ -73,7 +73,7 @@ const LOCAL_SCHEMES = [
             financial_assistance: 'Direct income support of Rs. 6,000 per year in three equal installments.',
             non_financial_support: 'Financial stability for small and marginal farmers.'
         },
-        eligibility: { categories: ['Small and Marginal Farmers'], states: ['central'] },
+        eligibility: { categories: ['Any', 'Small and Marginal Farmers', 'General', 'OBC', 'SC', 'ST'], states: ['central'] },
         documents_required: ['Aadhaar Card', 'Land Holding Documents', 'Bank Account']
     }
 ];
@@ -100,39 +100,53 @@ const SchemeService = {
         if (isCacheValid()) return _cache;
 
         try {
-            // Remove orderBy('name') to ensure documents missing the field are still returned
-            const q = query(collection(db, COLLECTION));
-            const snapshot = await getDocs(q);
-            const firestoreData = snapshot.docs.map(doc => {
-                const d = doc.data();
-                return { 
-                    id: doc.id, 
-                    ...d,
-                    // Map legacy field names if needed
-                    name: d.name || d.scheme_name || "Untitled Scheme",
-                    status: d.status || 'active',
-                    isScheme: true,
-                    is_scheme: true,
-                    governmentLevel: d.governmentLevel || d.government_level || 'Central'
-                };
-            });
+            // Add a timeout to firestore fetch to avoid hanging on poor connections
+            const fetchPromise = (async () => {
+                const q = query(collection(db, COLLECTION));
+                const snapshot = await getDocs(q);
+                return snapshot.docs.map(doc => {
+                    const d = doc.data();
+                    return { 
+                        id: doc.id, 
+                        ...d,
+                        name: d.name || d.scheme_name || "Untitled Scheme",
+                        status: d.status || 'active',
+                        isScheme: true,
+                        is_scheme: true,
+                        governmentLevel: d.governmentLevel || d.government_level || 'Central'
+                    };
+                });
+            })();
+
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Firestore fetch timeout')), 5000)
+            );
+
+            const firestoreData = await Promise.race([fetchPromise, timeoutPromise]);
 
             // Combine local schemes with firestore schemes
-            // Filter out local schemes that might have been seeded already (by name)
-            const seededNames = new Set(firestoreData.map(s => s.name.toLowerCase()));
+            const seededNames = new Set(firestoreData.map(s => (s.name || '').toLowerCase()));
             const uniqueLocal = LOCAL_SCHEMES.filter(ls => !seededNames.has(ls.name.toLowerCase()));
             
             const data = [...firestoreData, ...uniqueLocal];
-
-            // Sort in memory
-            data.sort((a, b) => a.name.localeCompare(b.name));
+            data.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
             _cache = data;
             _cacheTimestamp = Date.now();
             return _cache;
         } catch (error) {
-            console.error('SchemeService.getAll error:', error);
-            return [];
+            console.error('SchemeService.getAll fallback activated:', error.message);
+            // Return local schemes as fallback on fatal error or timeout
+            const fallbackData = LOCAL_SCHEMES.map(ls => ({
+                ...ls,
+                name: ls.name || ls.scheme_name || "Untitled Scheme",
+                status: ls.status || 'active',
+                isScheme: true,
+                is_scheme: true,
+                governmentLevel: ls.governmentLevel || ls.government_level || 'Central'
+            }));
+            _cache = fallbackData;
+            return fallbackData;
         }
     },
 
