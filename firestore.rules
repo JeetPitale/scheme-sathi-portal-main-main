@@ -1,18 +1,61 @@
-rules_version='2'
-
+rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // ════════════════════════════════════════
+    // UTILS
+    // ════════════════════════════════════════
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['SUPER_ADMIN', 'CONTENT_ADMIN', 'REVIEW_ADMIN'];
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ════════════════════════════════════════
+    // RULES
+    // ════════════════════════════════════════
+
+    // Schemes: Publicly readable, Admin writeable
+    match /schemes/{schemeId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Applications: User can create/read their own. Admin can read/update/delete all.
+    match /applications/{appId} {
+      allow create: if isAuthenticated();
+      allow read: if isOwner(resource.data.user_id) || isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // Users: Owner or Admin
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    // Notifications: Publicly readable targeted ones, Write admin
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated() && (resource.data.target == 'all' || resource.data.user_id == request.auth.uid);
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Audit Logs: Admin ONLY
+    match /audit_logs/{logId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Default: Deny all
     match /{document=**} {
-      // This rule allows anyone with your database reference to view, edit,
-      // and delete all data in your database. It is useful for getting
-      // started, but it is configured to expire after 30 days because it
-      // leaves your app open to attackers. At that time, all client
-      // requests to your database will be denied.
-      //
-      // Make sure to write security rules for your app before that time, or
-      // else all client requests to your database will be denied until you
-      // update your rules.
-      allow read, write: if true;
+      allow read, write: if isAdmin();
     }
   }
 }

@@ -56,7 +56,7 @@ async function fetchUserProfile(uid) {
 }
 
 // ════════════════════════════════════════
-// Auth Store — Supabase Auth + Supabase profiles
+// Auth Store — Firebase Auth + Firestore profiles
 // ════════════════════════════════════════
 export const useAuthStore = create()(persist((set, get) => ({
     user: null,
@@ -282,7 +282,7 @@ export const useAuthStore = create()(persist((set, get) => ({
 }));
 
 // ════════════════════════════════════════
-// Application Store — with Supabase backend
+// Application Store — Firebase backend
 // ════════════════════════════════════════
 export const useApplicationStore = create((set, get) => ({
     applications: [],
@@ -292,7 +292,12 @@ export const useApplicationStore = create((set, get) => ({
         const user = useAuthStore.getState().user;
         if (!user?.id) return;
 
-        const result = await getUserApplications(user.id);
+        let result;
+        if (isAdminRole(user.role)) {
+            result = await getAllApplications();
+        } else {
+            result = await getUserApplications(user.id);
+        }
 
         if (result.success) {
             set({ applications: result.data, loaded: true });
@@ -353,7 +358,7 @@ export const useApplicationStore = create((set, get) => ({
 }));
 
 // ════════════════════════════════════════
-// Notification Store — Supabase-backed
+// Notification Store — Firebase-backed
 // ════════════════════════════════════════
 export const useNotificationStore = create((set, get) => ({
     notifications: [],
@@ -428,7 +433,7 @@ export const useNotificationStore = create((set, get) => ({
 }));
 
 // ════════════════════════════════════════
-// Activity Log Store — Supabase-backed
+// Activity Log Store — Firebase-backed
 // ════════════════════════════════════════
 export const useActivityLogStore = create((set, get) => ({
     logs: [],

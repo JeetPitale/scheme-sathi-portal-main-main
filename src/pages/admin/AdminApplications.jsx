@@ -26,10 +26,15 @@ const AdminApplications = () => {
 
     const filtered = useMemo(() => {
         return applications.filter(a => {
-            if (tab !== 'all' && a.status !== tab) return false;
-            if (search && !a.serviceName.toLowerCase().includes(search.toLowerCase()) &&
-                !a.id.toLowerCase().includes(search.toLowerCase()) &&
-                !(a.formData?.fullName || '').toLowerCase().includes(search.toLowerCase())) return false;
+            const status = (a.status || '').toLowerCase().replace(' ', '_');
+            if (tab !== 'all' && status !== tab) return false;
+            
+            const searchLower = search.toLowerCase();
+            const serviceMatch = (a.serviceName || '').toLowerCase().includes(searchLower);
+            const idMatch = (a.id || '').toLowerCase().includes(searchLower);
+            const nameMatch = (a.formData?.fullName || '').toLowerCase().includes(searchLower);
+            
+            if (search && !serviceMatch && !idMatch && !nameMatch) return false;
             return true;
         });
     }, [applications, tab, search]);
@@ -38,10 +43,10 @@ const AdminApplications = () => {
 
     const counts = useMemo(() => ({
         all: applications.length,
-        pending: applications.filter(a => a.status === 'pending').length,
-        under_review: applications.filter(a => a.status === 'under_review').length,
-        approved: applications.filter(a => a.status === 'approved').length,
-        rejected: applications.filter(a => a.status === 'rejected').length,
+        pending: applications.filter(a => (a.status || '').toLowerCase() === 'pending').length,
+        under_review: applications.filter(a => (a.status || '').toLowerCase().replace(' ', '_') === 'under_review').length,
+        approved: applications.filter(a => (a.status || '').toLowerCase() === 'approved').length,
+        rejected: applications.filter(a => (a.status || '').toLowerCase() === 'rejected').length,
     }), [applications]);
 
     const handleAction = (app, type) => {
@@ -50,31 +55,36 @@ const AdminApplications = () => {
         setRemarks('');
     };
 
-    const confirmAction = () => {
+    const confirmAction = async () => {
         if (!actionApp) return;
 
-        if (actionType === 'under_review') {
-            const result = moveToReview(actionApp.id);
-            if (result.success) {
-                toast.success('Application moved to review');
-                addLog(`Application review started: ${actionApp.id}`);
+        try {
+            if (actionType === 'under_review') {
+                const result = await moveToReview(actionApp.id);
+                if (result.success) {
+                    toast.success('Application moved to review');
+                    addLog(`Application review started: ${actionApp.id}`);
+                } else {
+                    toast.error(result.error || result.message);
+                }
             } else {
-                toast.error(result.error);
+                if (actionType === 'rejected' && (!remarks || !remarks.trim())) {
+                    toast.error('Please provide a reason for rejection');
+                    return;
+                }
+                const result = await updateApplicationStatus(actionApp.id, actionType, remarks);
+                if (result.success) {
+                    toast.success(`Application ${actionType}`);
+                    addLog(`Application ${actionType}: ${actionApp.id} (${actionApp.serviceName})`);
+                } else {
+                    toast.error(result.error || result.message || 'Operation failed');
+                }
             }
-        } else {
-            if (actionType === 'rejected' && (!remarks || !remarks.trim())) {
-                toast.error('Please provide a reason for rejection');
-                return;
-            }
-            const result = updateApplicationStatus(actionApp.id, actionType, remarks);
-            if (result.success) {
-                toast.success(`Application ${actionType}`);
-                addLog(`Application ${actionType}: ${actionApp.id} (${actionApp.serviceName})`);
-            } else {
-                toast.error(result.error);
-            }
+        } catch (err) {
+            toast.error(err.message || 'An error occurred');
+        } finally {
+            setActionApp(null);
         }
-        setActionApp(null);
     };
 
     const tabs = [
@@ -86,6 +96,7 @@ const AdminApplications = () => {
     ];
 
     const getStatusBadge = (status) => {
+        const s = (status || '').toLowerCase().replace(' ', '_');
         const classes = {
             pending: 'badge-warning',
             under_review: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
@@ -99,8 +110,8 @@ const AdminApplications = () => {
             rejected: 'Rejected',
         };
         return (
-            <span className={`admin-badge ${classes[status] || 'badge-warning'}`}>
-                {labels[status] || status}
+            <span className={`admin-badge ${classes[s] || 'badge-warning'}`}>
+                {labels[s] || status}
             </span>
         );
     };
@@ -143,7 +154,7 @@ const AdminApplications = () => {
                                 {paged.items.map(app => (
                                     <tr key={app.id}>
                                         <td className="font-mono text-xs">{app.id}</td>
-                                        <td>{app.formData?.fullName || app.userId}</td>
+                                        <td>{app.formData?.fullName || app.userId || 'Guest'}</td>
                                         <td className="max-w-[200px] truncate">{app.serviceName}</td>
                                         <td>{new Date(app.dateApplied).toLocaleDateString()}</td>
                                         <td>{getStatusBadge(app.status)}</td>
@@ -152,13 +163,13 @@ const AdminApplications = () => {
                                                 <button onClick={() => setViewApp(app)} className="admin-btn-icon" title="View Timeline">
                                                     <Eye className="h-4 w-4" />
                                                 </button>
-                                                {canReview && app.status === 'pending' && (
+                                                {canReview && (app.status || '').toLowerCase() === 'pending' && (
                                                     <button onClick={() => handleAction(app, 'under_review')}
                                                         className="admin-btn-icon text-blue-500" title="Move to Review">
                                                         <ArrowRight className="h-4 w-4" />
                                                     </button>
                                                 )}
-                                                {canReview && app.status === 'under_review' && (
+                                                {canReview && (app.status || '').toLowerCase().replace(' ', '_') === 'under_review' && (
                                                     <>
                                                         <button onClick={() => handleAction(app, 'approved')}
                                                             className="admin-btn-icon text-green-500" title="Approve">

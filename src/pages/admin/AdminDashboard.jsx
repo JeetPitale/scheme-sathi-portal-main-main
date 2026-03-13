@@ -1,32 +1,44 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { Users, FileText, ClipboardList, TrendingUp } from 'lucide-react';
 import AdminLayout from '@/components/Admin/AdminLayout';
 import { useAuthStore, useApplicationStore } from '@/lib/store';
 import { useSchemeStore } from '@/stores/schemeStore';
+import { isAdminRole } from '@/lib/rbac';
 
 const AdminDashboard = () => {
-    const users = useAuthStore(s => s.getAllUsers)();
+    const [allUsers, setAllUsers] = useState([]);
+    const getAllUsers = useAuthStore(s => s.getAllUsers);
     const applications = useApplicationStore(s => s.applications);
     const schemes = useSchemeStore(s => s.schemes);
 
+    useEffect(() => {
+        const fetchUsers = async () => {
+            const data = await getAllUsers();
+            setAllUsers(data);
+        };
+        fetchUsers();
+    }, [getAllUsers]);
+
     const stats = useMemo(() => {
-        const totalUsers = users.length;
-        const activeUsers = users.filter(u => u.status === 'active').length;
+        const totalUsers = allUsers.length;
+        const activeUsers = allUsers.filter(u => u.status === 'active' || !u.status).length;
         const totalApps = applications.length;
-        const approved = applications.filter(a => a.status === 'approved').length;
+        const approved = applications.filter(a => a.status === 'approved' || a.status === 'Approved').length;
         const approvalRate = totalApps > 0 ? Math.round((approved / totalApps) * 100) : 0;
         return { totalUsers, activeUsers, totalApps, approvalRate, totalSchemes: schemes.length };
-    }, [users, applications, schemes]);
+    }, [allUsers, applications, schemes]);
 
     const recentApps = useMemo(() =>
-        [...applications].sort((a, b) => new Date(b.dateApplied) - new Date(a.dateApplied)).slice(0, 5),
+        [...applications]
+            .sort((a, b) => new Date(b.dateApplied) - new Date(a.dateApplied))
+            .slice(0, 5),
         [applications]
     );
 
     return (
         <AdminLayout>
             <div className="admin-page">
-                <h1 className="admin-page-title">Dashboard</h1>
+                <h1 className="admin-page-title">Dashboard Summary</h1>
 
                 <div className="admin-stats-grid">
                     <div className="admin-stat-card">
@@ -85,11 +97,11 @@ const AdminDashboard = () => {
                                 {recentApps.map(app => (
                                     <tr key={app.id}>
                                         <td className="font-mono text-xs">{app.id}</td>
-                                        <td>{app.formData?.fullName || app.userId}</td>
-                                        <td>{app.serviceName}</td>
+                                        <td>{app.formData?.fullName || app.userId || 'Guest'}</td>
+                                        <td>{app.serviceName || 'Unknown Scheme'}</td>
                                         <td>{new Date(app.dateApplied).toLocaleDateString()}</td>
                                         <td>
-                                            <span className={`admin-badge ${app.status === 'approved' ? 'badge-success' : app.status === 'rejected' ? 'badge-danger' : 'badge-warning'}`}>
+                                            <span className={`admin-badge ${app.status?.toLowerCase() === 'approved' ? 'badge-success' : app.status?.toLowerCase() === 'rejected' ? 'badge-danger' : 'badge-warning'}`}>
                                                 {app.status}
                                             </span>
                                         </td>
