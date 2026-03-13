@@ -1,13 +1,27 @@
 /**
  * SchemeService — CRUD for government schemes
- * Backed by Supabase `schemes` table.
+ * Backed by Firebase `schemes` collection.
  */
 
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import { 
+    collection, 
+    addDoc, 
+    getDocs, 
+    updateDoc, 
+    deleteDoc, 
+    query, 
+    where, 
+    orderBy, 
+    limit, 
+    doc, 
+    getDoc, 
+    serverTimestamp,
+    or
+} from 'firebase/firestore';
 
-const TABLE = 'schemes';
+const COLLECTION = 'schemes';
 
-// ── In-memory cache ──
 let _cache = null;
 let _cacheTimestamp = 0;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -21,149 +35,130 @@ function invalidateCache() {
     _cacheTimestamp = 0;
 }
 
-// ── Public API ──
 const SchemeService = {
-    /**
-     * Legacy seed method — now just ensures data exists or performs initial fetch.
-     */
     async seed() {
         return this.getAll();
     },
 
-    /** Get all schemes */
     async getAll() {
         if (isCacheValid()) return _cache;
 
-        const { data, error } = await supabase
-            .from(TABLE)
-            .select('*')
-            .order('name', { ascending: true });
+        try {
+            const q = query(collection(db, COLLECTION), orderBy('name', 'asc'));
+            const snapshot = await getDocs(q);
+            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        if (error) {
+            _cache = data;
+            _cacheTimestamp = Date.now();
+            return _cache;
+        } catch (error) {
             console.error('SchemeService.getAll error:', error);
             return [];
         }
-
-        _cache = data || [];
-        _cacheTimestamp = Date.now();
-        return _cache;
     },
 
-    /** Only active schemes */
     async getAllActive() {
         if (isCacheValid()) {
             return _cache.filter(s => s.status === 'active');
         }
 
-        const { data, error } = await supabase
-            .from(TABLE)
-            .select('*')
-            .eq('status', 'active')
-            .order('name', { ascending: true });
-
-        if (error) {
+        try {
+            const q = query(
+                collection(db, COLLECTION),
+                where('status', '==', 'active'),
+                orderBy('name', 'asc')
+            );
+            const snapshot = await getDocs(q);
+            return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        } catch (error) {
             console.error('SchemeService.getAllActive error:', error);
             return [];
         }
-        return data || [];
     },
 
-    /** Get a single scheme by its primary UUID `id` */
     async getById(id) {
-        const { data, error } = await supabase
-            .from(TABLE)
-            .select('*')
-            .eq('id', id)
-            .single();
-
-        if (error) {
+        try {
+            const docRef = doc(db, COLLECTION, id);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                return { id: docSnap.id, ...docSnap.data() };
+            }
+            return null;
+        } catch (error) {
             console.error(`SchemeService.getById(${id}) error:`, error);
             return null;
         }
-        return data;
     },
 
-    /** Get a single scheme by its unique `slug` */
     async getBySlug(slug) {
-        const { data, error } = await supabase
-            .from(TABLE)
-            .select('*')
-            .eq('slug', slug)
-            .single();
-
-        if (error) {
+        try {
+            const q = query(collection(db, COLLECTION), where('slug', '==', slug), limit(1));
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) {
+                const doc = snapshot.docs[0];
+                return { id: doc.id, ...doc.data() };
+            }
+            return null;
+        } catch (error) {
             console.error(`SchemeService.getBySlug(${slug}) error:`, error);
             return null;
         }
-        return data;
     },
 
-    /** Get featured schemes */
-    async getFeatured(limit = 6) {
-        const { data, error } = await supabase
-            .from(TABLE)
-            .select('*')
-            .eq('is_featured', true)
-            .eq('status', 'active')
-            .limit(limit);
-
-        if (error) {
+    async getFeatured(limitCount = 6) {
+        try {
+            const q = query(
+                collection(db, COLLECTION),
+                where('is_featured', '==', true),
+                where('status', '==', 'active'),
+                limit(limitCount)
+            );
+            const snapshot = await getDocs(q);
+            return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        } catch (error) {
             console.error('SchemeService.getFeatured error:', error);
             return [];
         }
-        return data || [];
     },
 
-    /** Add a scheme */
     async add(schemeData) {
         try {
-            const { data, error } = await supabase
-                .from(TABLE)
-                .insert([{
-                    ...schemeData,
-                    status: schemeData.status || 'active'
-                }])
-                .select()
-                .single();
-
-            if (error) throw error;
+            const newScheme = {
+                ...schemeData,
+                status: schemeData.status || 'active',
+                created_at: serverTimestamp(),
+                updated_at: serverTimestamp()
+            };
+            const docRef = await addDoc(collection(db, COLLECTION), newScheme);
+            const snapshot = await getDoc(docRef);
 
             invalidateCache();
-            return { success: true, scheme: data };
+            return { success: true, scheme: { id: docRef.id, ...snapshot.data() } };
         } catch (err) {
             return { success: false, error: err.message };
         }
     },
 
-    /** Update a scheme by its `id` */
     async update(id, updates) {
         try {
-            const { data, error } = await supabase
-                .from(TABLE)
-                .update({ ...updates, updated_at: new Date().toISOString() })
-                .eq('id', id)
-                .select()
-                .single();
-
-            if (error) throw error;
+            const docRef = doc(db, COLLECTION, id);
+            await updateDoc(docRef, { 
+                ...updates, 
+                updated_at: serverTimestamp() 
+            });
 
             invalidateCache();
-            return { success: true, scheme: data };
+            const snapshot = await getDoc(docRef);
+            return { success: true, scheme: { id, ...snapshot.data() } };
         } catch (err) {
             return { success: false, error: err.message };
         }
     },
 
-    /** Delete a scheme by its `id` */
     async remove(id) {
         try {
-            const { error } = await supabase
-                .from(TABLE)
-                .delete()
-                .eq('id', id);
-
-            if (error) throw error;
-
+            const docRef = doc(db, COLLECTION, id);
+            await deleteDoc(docRef);
             invalidateCache();
             return { success: true };
         } catch (err) {
@@ -171,66 +166,69 @@ const SchemeService = {
         }
     },
 
-    /** Toggle active/inactive */
     async toggleStatus(id) {
-        const { data: existing, error: fetchError } = await supabase
-            .from(TABLE)
-            .select('status')
-            .eq('id', id)
-            .single();
+        const scheme = await this.getById(id);
+        if (!scheme) return { success: false, error: 'Scheme not found' };
 
-        if (fetchError || !existing) return { success: false, error: 'Scheme not found' };
-
-        const newStatus = existing.status === 'active' ? 'inactive' : 'active';
+        const newStatus = scheme.status === 'active' ? 'inactive' : 'active';
         return this.update(id, { status: newStatus });
     },
 
-    /** Search schemes (Server-side) with pagination */
-    async search(queryStr, page = 1, limit = 12) {
-        const from = (page - 1) * limit;
-        const to = from + limit - 1;
+    async search(queryStr, page = 1, pageSize = 12) {
+        try {
+            // Note: Cloud Firestore does not support native full-text search or ilike
+            // For small datasets, we fetch all active and filter in memory
+            const q = query(
+                collection(db, COLLECTION),
+                where('status', '==', 'active'),
+                orderBy('name', 'asc')
+            );
+            const snapshot = await getDocs(q);
+            const allActive = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            const filtered = allActive.filter(s => 
+                (s.name || '').toLowerCase().includes(queryStr.toLowerCase()) ||
+                (s.description || '').toLowerCase().includes(queryStr.toLowerCase()) ||
+                (s.category || '').toLowerCase().includes(queryStr.toLowerCase())
+            );
 
-        const { data, error, count } = await supabase
-            .from(TABLE)
-            .select('*', { count: 'exact' })
-            .or(`name.ilike.%${queryStr}%,description.ilike.%${queryStr}%,category.ilike.%${queryStr}%`)
-            .eq('status', 'active')
-            .order('name', { ascending: true })
-            .range(from, to);
+            const start = (page - 1) * pageSize;
+            const paginated = filtered.slice(start, start + pageSize);
 
-        if (error) {
+            return { data: paginated, count: filtered.length };
+        } catch (error) {
             console.error('SchemeService.search error:', error);
             return { data: [], count: 0 };
         }
-        return { data: data || [], count: count || 0 };
     },
 
-    /** Filter by category and/or state (Server-side) with pagination */
-    async filter(filters, page = 1, limit = 12) {
-        const from = (page - 1) * limit;
-        const to = from + limit - 1;
+    async filter(filters, page = 1, pageSize = 12) {
+        try {
+            let q = query(collection(db, COLLECTION));
 
-        let query = supabase.from(TABLE).select('*', { count: 'exact' });
-
-        if (filters.category) query = query.eq('category', filters.category);
-        if (filters.state) {
-            if (filters.state !== 'central') {
-                query = query.or(`state.eq.${filters.state},state.eq.central`);
-            } else {
-                query = query.eq('state', 'central');
+            if (filters.category) q = query(q, where('category', '==', filters.category));
+            if (filters.state) {
+                if (filters.state !== 'central') {
+                    q = query(q, or(where('state', '==', filters.state), where('state', '==', 'central')));
+                } else {
+                    q = query(q, where('state', '==', 'central'));
+                }
             }
-        }
-        if (filters.status) query = query.eq('status', filters.status);
+            if (filters.status) q = query(q, where('status', '==', filters.status));
 
-        const { data, error, count } = await query
-            .order('name', { ascending: true })
-            .range(from, to);
+            q = query(q, orderBy('name', 'asc'));
 
-        if (error) {
+            const snapshot = await getDocs(q);
+            const allFiltered = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            const start = (page - 1) * pageSize;
+            const paginated = allFiltered.slice(start, start + pageSize);
+
+            return { data: paginated, count: allFiltered.length };
+        } catch (error) {
             console.error('SchemeService.filter error:', error);
             return { data: [], count: 0 };
         }
-        return { data: data || [], count: count || 0 };
     },
 
     invalidateCache,

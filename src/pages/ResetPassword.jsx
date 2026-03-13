@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import Layout from '@/components/Layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
+import { auth } from '@/lib/firebase';
+import { confirmPasswordReset, verifyPasswordResetCode } from 'firebase/auth';
 
 const schema = z.object({
     password: z.string().min(8, 'Password must be at least 8 characters'),
@@ -21,27 +22,55 @@ const schema = z.object({
 
 const ResetPassword = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [oobCode, setOobCode] = useState(null);
+    const [email, setEmail] = useState(null);
+    const [loading, setLoading] = useState(true);
 
     const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
         resolver: zodResolver(schema),
     });
 
+    useEffect(() => {
+        const query = new URLSearchParams(location.search);
+        const code = query.get('oobCode');
+        if (!code) {
+            toast.error('Invalid or missing reset code');
+            navigate('/login');
+            return;
+        }
+
+        setOobCode(code);
+        verifyPasswordResetCode(auth, code)
+            .then((verifiedEmail) => {
+                setEmail(verifiedEmail);
+                setLoading(false);
+            })
+            .catch((error) => {
+                toast.error('Password reset link is invalid or has expired');
+                navigate('/forgot-password');
+            });
+    }, [location, navigate]);
+
     const onSubmit = async (data) => {
         try {
-            const { error } = await supabase.auth.updateUser({
-                password: data.password
-            });
-
-            if (error) throw error;
-
+            await confirmPasswordReset(auth, oobCode, data.password);
             toast.success('Password updated successfully!');
             navigate('/login');
         } catch (error) {
             toast.error(error.message || 'Failed to update password');
         }
     };
+
+    if (loading) {
+        return (
+            <div className="flex h-screen items-center justify-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+            </div>
+        );
+    }
 
     return (
         <Layout showFooter={false}>
@@ -50,7 +79,7 @@ const ResetPassword = () => {
                     <CardHeader className="text-center pb-2">
                         <CardTitle className="text-2xl">Create New Password</CardTitle>
                         <CardDescription>
-                            Please enter your new password below.
+                            Resetting password for {email}
                         </CardDescription>
                     </CardHeader>
                     <CardContent>

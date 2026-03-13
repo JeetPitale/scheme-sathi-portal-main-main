@@ -1,14 +1,27 @@
 /**
  * NotificationService — Create, read, mark-read notifications
- * Backed by Supabase `notifications` table.
- * Supports broadcast (target='all') and per-user targeting.
+ * Backed by Firebase `notifications` collection.
  */
 
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import { 
+    collection, 
+    addDoc, 
+    getDocs, 
+    updateDoc, 
+    query, 
+    where, 
+    orderBy, 
+    limit, 
+    doc, 
+    getDoc, 
+    serverTimestamp,
+    writeBatch,
+    or
+} from 'firebase/firestore';
 
-const TABLE = 'notifications';
+const COLLECTION = 'notifications';
 
-// ── Notification type constants ──
 export const NOTIF_TYPES = {
     APPROVAL: 'approval',
     REJECTION: 'rejection',
@@ -17,12 +30,10 @@ export const NOTIF_TYPES = {
     SCHEME: 'scheme',
 };
 
-// ── Dedup: prevent same userId+title within 60s (client-side) ──
 let _recentNotifs = [];
 
 function isDuplicate(userId, title) {
     const now = Date.now();
-    // Clean old entries
     _recentNotifs = _recentNotifs.filter(n => (now - n.time) < 60000);
     return _recentNotifs.some(n => n.userId === userId && n.title === title);
 }
@@ -31,56 +42,51 @@ function trackNotif(userId, title) {
     _recentNotifs.push({ userId, title, time: Date.now() });
 }
 
-// ── Helper to convert db row to app object ──
-function dbToNotif(n) {
+function dbToNotif(doc) {
+    const n = doc.data();
     return {
         ...n,
+        id: doc.id,
         userId: n.user_id,
-        sentAt: n.sent_at,
+        sentAt: n.sent_at?.toDate()?.toISOString() || new Date().toISOString(),
     };
 }
 
-// ── Public API ──
 const NotificationService = {
-    /** Seed is a no-op */
-    seed() {
-        // No seeding needed
-    },
+    seed() {},
 
-    /** Get all notifications (admin view, newest first) */
     async getAll(maxResults = 200) {
-        const { data, error } = await supabase
-            .from(TABLE)
-            .select('*')
-            .order('sent_at', { ascending: false })
-            .limit(maxResults);
-
-        if (error) {
+        try {
+            const q = query(
+                collection(db, COLLECTION),
+                orderBy('sent_at', 'desc'),
+                limit(maxResults)
+            );
+            const snapshot = await getDocs(q);
+            return snapshot.docs.map(dbToNotif);
+        } catch (error) {
             console.error('NotificationService.getAll error:', error);
             return [];
         }
-        return (data || []).map(dbToNotif);
     },
 
-    /** Get notifications for a specific user (their own + broadcasts) */
     async getByUser(userId) {
-        const { data, error } = await supabase
-            .from(TABLE)
-            .select('*')
-            .or(`user_id.eq.${userId},target.eq.all`)
-            .order('sent_at', { ascending: false })
-            .limit(100);
-
-        if (error) {
+        try {
+            const q = query(
+                collection(db, COLLECTION),
+                or(where('user_id', '==', userId), where('target', '==', 'all')),
+                orderBy('sent_at', 'desc'),
+                limit(100)
+            );
+            const snapshot = await getDocs(q);
+            return snapshot.docs.map(dbToNotif);
+        } catch (error) {
             console.error('NotificationService.getByUser error:', error);
             return [];
         }
-        return (data || []).map(dbToNotif);
     },
 
-    /** Add a notification (generic) */
     async add(notifData) {
-        // Dedup check
         if (notifData.userId && isDuplicate(notifData.userId, notifData.title)) {
             return { success: false, error: 'Duplicate notification' };
         }
@@ -94,28 +100,23 @@ const NotificationService = {
                 status: 'sent',
                 read: false,
                 type: notifData.type || NOTIF_TYPES.ANNOUNCEMENT,
+                sent_at: serverTimestamp()
             };
 
-            const { data, error } = await supabase
-                .from(TABLE)
-                .insert(newNotif)
-                .select()
-                .single();
-
-            if (error) throw error;
+            const docRef = await addDoc(collection(db, COLLECTION), newNotif);
+            const snapshot = await getDoc(docRef);
 
             if (notifData.userId) {
                 trackNotif(notifData.userId, notifData.title);
             }
 
-            return { success: true, notification: dbToNotif(data) };
+            return { success: true, notification: dbToNotif(snapshot) };
         } catch (err) {
             console.error('NotificationService.add error:', err);
             return { success: false, error: err.message };
         }
     },
 
-    /** Send notification to a specific user */
     async sendToUser(userId, title, message, type = NOTIF_TYPES.SYSTEM) {
         return this.add({
             userId,
@@ -126,7 +127,6 @@ const NotificationService = {
         });
     },
 
-    /** Broadcast to all users */
     async broadcastToAll(title, message, type = NOTIF_TYPES.ANNOUNCEMENT) {
         return this.add({
             title,
@@ -136,31 +136,31 @@ const NotificationService = {
         });
     },
 
-    /** Mark a notification as read */
     async markRead(notifId) {
         try {
-            const { error } = await supabase
-                .from(TABLE)
-                .update({ read: true })
-                .eq('id', notifId);
-
-            if (error) throw error;
+            const docRef = doc(db, COLLECTION, notifId);
+            await updateDoc(docRef, { read: true });
             return { success: true };
         } catch (err) {
             return { success: false, error: err.message };
         }
     },
 
-    /** Mark all notifications as read for a user */
     async markAllRead(userId) {
         try {
-            const { error } = await supabase
-                .from(TABLE)
-                .update({ read: true })
-                .eq('user_id', userId)
-                .eq('read', false);
-
-            if (error) throw error;
+            const q = query(
+                collection(db, COLLECTION),
+                where('user_id', '==', userId),
+                where('read', '==', false)
+            );
+            const snapshot = await getDocs(q);
+            
+            const batch = writeBatch(db);
+            snapshot.docs.forEach((doc) => {
+                batch.update(doc.ref, { read: true });
+            });
+            await batch.commit();
+            
             return { success: true };
         } catch (err) {
             console.error('NotificationService.markAllRead error:', err);
@@ -168,19 +168,19 @@ const NotificationService = {
         }
     },
 
-    /** Get count of unread for a user */
     async getUnreadCount(userId) {
-        const { count, error } = await supabase
-            .from(TABLE)
-            .select('*', { count: 'exact', head: true })
-            .or(`user_id.eq.${userId},target.eq.all`)
-            .eq('read', false);
-
-        if (error) {
+        try {
+            const q = query(
+                collection(db, COLLECTION),
+                or(where('user_id', '==', userId), where('target', '==', 'all')),
+                where('read', '==', false)
+            );
+            const snapshot = await getDocs(q);
+            return snapshot.size;
+        } catch (error) {
             console.error('NotificationService.getUnreadCount error:', error);
             return 0;
         }
-        return count || 0;
     },
 };
 

@@ -1,12 +1,22 @@
 /**
  * AuditService — Immutable audit log for all admin actions
- * Backed by Supabase `audit_logs` table.
- * APPEND-ONLY: Only .insert() is used. No update or delete operations.
+ * Backed by Firebase `audit_logs` collection.
+ * APPEND-ONLY: Only addDoc is used. No update or delete operations.
  */
 
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import { 
+    collection, 
+    addDoc, 
+    getDocs, 
+    query, 
+    where, 
+    orderBy, 
+    limit, 
+    serverTimestamp 
+} from 'firebase/firestore';
 
-const TABLE = 'audit_logs';
+const COLLECTION = 'audit_logs';
 
 /** Action type constants */
 export const AUDIT_ACTIONS = {
@@ -42,32 +52,32 @@ function isDuplicate(actionType, targetId) {
 
 // ── Public API ──
 const AuditService = {
-    /** Seed is a no-op */
-    seed() {
-        // No seeding needed
-    },
+    seed() {},
 
     /** Get all logs (newest first) */
     async getAll(maxResults = 200) {
-        const { data, error } = await supabase
-            .from(TABLE)
-            .select('*')
-            .order('timestamp', { ascending: false })
-            .limit(maxResults);
-
-        if (error) {
+        try {
+            const q = query(
+                collection(db, COLLECTION),
+                orderBy('timestamp', 'desc'),
+                limit(maxResults)
+            );
+            const snapshot = await getDocs(q);
+            return snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                timestamp: doc.data().timestamp?.toDate()?.toISOString() || new Date().toISOString()
+            }));
+        } catch (error) {
             console.error('AuditService.getAll error:', error);
             return [];
         }
-
-        return data || [];
     },
 
     /**
      * Create an audit log entry (APPEND-ONLY)
      */
     async log(actionType, performedBy, performerRole, targetId, targetType, metadata = {}) {
-        // Duplicate prevention
         if (isDuplicate(actionType, targetId)) {
             return { success: false, error: 'Duplicate log entry' };
         }
@@ -80,20 +90,14 @@ const AuditService = {
                 target_id: targetId || 'N/A',
                 target_type: targetType || 'system',
                 metadata: metadata,
+                timestamp: serverTimestamp()
             };
 
-            const { data, error } = await supabase
-                .from(TABLE)
-                .insert(entry)
-                .select()
-                .single();
+            const docRef = await addDoc(collection(db, COLLECTION), entry);
 
-            if (error) throw error;
-
-            // Update dedup
             _lastLog = { actionType, targetId: targetId || '', time: Date.now() };
 
-            return { success: true, entry: data };
+            return { success: true, id: docRef.id };
         } catch (err) {
             console.error('AuditService.log error:', err);
             return { success: false, error: err.message };
@@ -102,21 +106,26 @@ const AuditService = {
 
     /** Filter logs by action type */
     async getByActionType(actionType) {
-        const { data, error } = await supabase
-            .from(TABLE)
-            .select('*')
-            .eq('action_type', actionType)
-            .order('timestamp', { ascending: false })
-            .limit(100);
-
-        if (error) {
+        try {
+            const q = query(
+                collection(db, COLLECTION),
+                where('action_type', '==', actionType),
+                orderBy('timestamp', 'desc'),
+                limit(100)
+            );
+            const snapshot = await getDocs(q);
+            return snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                timestamp: doc.data().timestamp?.toDate()?.toISOString() || new Date().toISOString()
+            }));
+        } catch (error) {
             console.error('AuditService.getByActionType error:', error);
             return [];
         }
-        return data || [];
     },
 
-    /** Get unique action types from the db (could be large, limit used) */
+    /** Get unique action types */
     async getActionTypes() {
         const all = await this.getAll(500);
         const types = new Set(all.map(l => l.action_type));

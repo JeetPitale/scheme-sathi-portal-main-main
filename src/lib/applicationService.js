@@ -1,11 +1,12 @@
 /**
  * applicationService — Create and fetch user applications
- * Backed by Supabase `applications` table.
+ * Backed by Firebase `applications` collection.
  */
 
-import { supabase } from '@/lib/supabase';
+import { db } from '@/lib/firebase';
+import { collection, addDoc, getDocs, updateDoc, query, where, orderBy, doc, getDoc, serverTimestamp } from 'firebase/firestore';
 
-const TABLE = 'applications';
+const COLLECTION = 'applications';
 
 /**
  * Generates a unique Application ID in the format SSA-YYYY-XXXXX
@@ -17,7 +18,7 @@ export const generateApplicationId = () => {
 };
 
 /**
- * Creates a new application in Supabase
+ * Creates a new application in Firebase
  * @param {Object} payload The application data payload
  * @returns {Promise<{success: boolean, data?: any, error?: string}>}
  */
@@ -29,15 +30,10 @@ export const createApplication = async (payload) => {
 
         // Retry loop to ensure zero collisions
         while (!isUnique && attempts < 3) {
-            const { data, error } = await supabase
-                .from(TABLE)
-                .select('id')
-                .eq('application_id', appId)
-                .limit(1);
+            const q = query(collection(db, COLLECTION), where("application_id", "==", appId));
+            const querySnapshot = await getDocs(q);
 
-            if (error) throw error;
-
-            if (!data || data.length === 0) {
+            if (querySnapshot.empty) {
                 isUnique = true;
             } else {
                 appId = generateApplicationId();
@@ -56,25 +52,21 @@ export const createApplication = async (payload) => {
             scheme_name: payload.serviceName || payload.scheme_name,
             status: 'Pending',
             form_data: payload.formData || {},
+            submitted_at: serverTimestamp()
         };
 
-        const { data, error } = await supabase
-            .from(TABLE)
-            .insert(applicationRecord)
-            .select()
-            .single();
-
-        if (error) throw error;
+        const docRef = await addDoc(collection(db, COLLECTION), applicationRecord);
+        const newDoc = await getDoc(docRef);
 
         return {
             success: true,
             data: {
-                ...data,
-                id: data.application_id,
-                internalId: data.id,
-                userId: data.user_id,
-                serviceId: data.scheme_id,
-                serviceName: data.scheme_name,
+                ...newDoc.data(),
+                id: appId,
+                internalId: docRef.id,
+                userId: payload.userId,
+                serviceId: payload.serviceId || payload.scheme_id,
+                serviceName: payload.serviceName || payload.scheme_name,
             },
         };
     } catch (error) {
@@ -90,25 +82,25 @@ export const createApplication = async (payload) => {
  */
 export const getUserApplications = async (userId) => {
     try {
-        const { data, error } = await supabase
-            .from(TABLE)
-            .select('*')
-            .eq('user_id', userId)
-            .order('submitted_at', { ascending: false });
+        const q = query(
+            collection(db, COLLECTION),
+            where("user_id", "==", userId),
+            orderBy("submitted_at", "desc")
+        );
+        const querySnapshot = await getDocs(q);
 
-        if (error) throw error;
-
-        const mapped = data.map(app => {
+        const mapped = querySnapshot.docs.map(doc => {
+            const data = doc.data();
             return {
-                id: app.application_id,
-                internalId: app.id,
-                userId: app.user_id,
-                serviceId: app.scheme_id,
-                serviceName: app.scheme_name,
-                status: (app.status || '').toLowerCase().replace(' ', '_'),
-                dateApplied: app.submitted_at,
-                formData: app.form_data,
-                remarks: app.remarks,
+                id: data.application_id,
+                internalId: doc.id,
+                userId: data.user_id,
+                serviceId: data.scheme_id,
+                serviceName: data.scheme_name,
+                status: (data.status || '').toLowerCase().replace(' ', '_'),
+                dateApplied: data.submitted_at?.toDate()?.toISOString() || new Date().toISOString(),
+                formData: data.form_data,
+                remarks: data.remarks,
             };
         });
 
@@ -125,24 +117,24 @@ export const getUserApplications = async (userId) => {
  */
 export const getAllApplications = async () => {
     try {
-        const { data, error } = await supabase
-            .from(TABLE)
-            .select('*')
-            .order('submitted_at', { ascending: false });
+        const q = query(
+            collection(db, COLLECTION),
+            orderBy("submitted_at", "desc")
+        );
+        const querySnapshot = await getDocs(q);
 
-        if (error) throw error;
-
-        const mapped = data.map(app => {
+        const mapped = querySnapshot.docs.map(doc => {
+            const data = doc.data();
             return {
-                id: app.application_id,
-                internalId: app.id,
-                userId: app.user_id,
-                serviceId: app.scheme_id,
-                serviceName: app.scheme_name,
-                status: (app.status || '').toLowerCase().replace(' ', '_'),
-                dateApplied: app.submitted_at,
-                formData: app.form_data,
-                remarks: app.remarks,
+                id: data.application_id,
+                internalId: doc.id,
+                userId: data.user_id,
+                serviceId: data.scheme_id,
+                serviceName: data.scheme_name,
+                status: (data.status || '').toLowerCase().replace(' ', '_'),
+                dateApplied: data.submitted_at?.toDate()?.toISOString() || new Date().toISOString(),
+                formData: data.form_data,
+                remarks: data.remarks,
             };
         });
 
@@ -158,15 +150,18 @@ export const updateApplicationStatus = async (appId, newStatus, remarks = null) 
         const updateData = { status: newStatus };
         if (remarks !== null) updateData.remarks = remarks;
 
-        const { data, error } = await supabase
-            .from(TABLE)
-            .update(updateData)
-            .eq('application_id', appId)
-            .select()
-            .single();
+        // First find the doc by application_id
+        const q = query(collection(db, COLLECTION), where("application_id", "==", appId));
+        const querySnapshot = await getDocs(q);
 
-        if (error) throw error;
-        return { success: true, data };
+        if (querySnapshot.empty) {
+            throw new Error("Application not found");
+        }
+
+        const docRef = doc(db, COLLECTION, querySnapshot.docs[0].id);
+        await updateDoc(docRef, updateData);
+
+        return { success: true, data: { ...querySnapshot.docs[0].data(), ...updateData } };
     } catch (err) {
         console.error("Update application failed:", err);
         return { success: false, error: err.message };

@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
+import { auth } from '@/lib/firebase';
+import { sendPasswordResetEmail } from 'firebase/auth';
 
 const schema = z.object({
     email: z.string().email('Valid email is required'),
@@ -22,12 +23,7 @@ const ForgotPassword = () => {
 
     const onSubmit = async (data) => {
         try {
-            const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
-                redirectTo: `${window.location.origin}/reset-password`,
-            });
-
-            if (error) throw error;
-
+            await sendPasswordResetEmail(auth, data.email);
             setIsSubmitted(true);
             toast.success('Password reset email sent');
         } catch (error) {

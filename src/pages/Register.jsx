@@ -11,7 +11,6 @@ import Layout from '@/components/Layout/Layout';
 import { useTranslation, languageNames } from '@/hooks/useTranslation';
 import { useAuthStore } from '@/lib/store';
 import { states } from '@/stores/schemeStore';
-import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
 const registerSchema = z.object({
@@ -30,7 +29,8 @@ const registerSchema = z.object({
 const Register = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { isAuthenticated, isAuthChecking, checkSession } = useAuthStore();
+  const { isAuthenticated, isAuthChecking } = useAuthStore();
+  const registerUser = useAuthStore(s => s.register);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -71,45 +71,22 @@ const Register = () => {
   }
 
   const onSubmit = async (data) => {
-    try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-        options: {
-          data: {
-            full_name: data.fullName,
-            state: data.state,
-            phone: data.mobile || null
-          }
-        }
-      });
+    const result = await registerUser({
+      email: data.email,
+      password: data.password,
+      fullName: data.fullName,
+      mobile: data.mobile,
+      language: data.language
+    });
 
-      if (authError) throw authError;
-
-      if (authData?.user) {
-        // Auto-create profile row
-        const profile = {
-          id: authData.user.id,
-          full_name: data.fullName,
-          email: data.email,
-          phone: data.mobile || null,
-          role: 'USER',
-          state: data.state,
-          preferred_language: data.language || 'en'
-        };
-        const { error: profileError } = await supabase.from('profiles').upsert(profile);
-        if (profileError) throw profileError;
-
-        // Re-check session in auth store
-        await checkSession();
-        toast.success("Welcome to Scheme Saarthi!");
-        navigate('/dashboard');
-      }
-    } catch (err) {
-      if (err.message?.includes('already registered')) {
+    if (result.success) {
+      toast.success("Welcome to Scheme Saarthi!");
+      navigate('/dashboard');
+    } else {
+      if (result.error?.includes('already-in-use') || result.error?.includes('already registered')) {
         setError('email', { message: 'Email already registered' });
       } else {
-        toast.error(err.message || 'Registration failed');
+        toast.error(result.error || 'Registration failed');
       }
     }
   };

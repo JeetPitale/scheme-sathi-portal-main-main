@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { supabase } from '@/lib/supabase';
+import { auth, db } from '@/lib/firebase';
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updatePassword } from 'firebase/auth';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
 import NotificationService from '@/services/NotificationService';
 import AuditService, { AUDIT_ACTIONS } from '@/services/AuditService';
 import { isAdminRole } from '@/lib/rbac';
@@ -31,18 +33,18 @@ function applyTheme(theme) {
 }
 
 // ════════════════════════════════════════
-// Helper: Fetch user profile from Supabase profiles table
+// Helper: Fetch user profile from Firebase profiles collection
 // ════════════════════════════════════════
 async function fetchUserProfile(uid) {
     try {
-        const { data, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', uid)
-            .single();
+        const docRef = doc(db, 'profiles', uid);
+        const docSnap = await getDoc(docRef);
 
-        if (error) throw error;
-        return data;
+        if (docSnap.exists()) {
+            return docSnap.data();
+        } else {
+            return null;
+        }
     } catch (err) {
         if (import.meta.env.DEV) console.warn('Profile fetch warning:', err.message);
         return null;
@@ -67,21 +69,21 @@ export const useAuthStore = create()(persist((set, get) => ({
         if (user) set({ user: { ...user, language } });
     },
 
-    /** Initialize Supabase onAuthStateChange listener */
+    /** Initialize Firebase onAuthStateChanged listener */
     initAuthListener: () => {
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            if (session?.user) {
-                const profile = await fetchUserProfile(session.user.id);
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            if (firebaseUser) {
+                const profile = await fetchUserProfile(firebaseUser.uid);
                 set({
                     user: {
                         ...(profile || {}),
-                        id: session.user.id,
-                        email: session.user.email,
-                        phone: session.user.phone,
+                        id: firebaseUser.uid,
+                        email: firebaseUser.email,
+                        phone: firebaseUser.phoneNumber,
                     },
                     isAuthenticated: true,
                     isAuthChecking: false,
-                    session,
+                    session: { user: firebaseUser }, // Mapping to match previous structure
                 });
             } else {
                 set({
@@ -92,47 +94,44 @@ export const useAuthStore = create()(persist((set, get) => ({
                 });
             }
         });
-        return () => subscription.unsubscribe();
+        return unsubscribe;
     },
 
-    /** Check current session (called on app mount) */
+    /** Check current session (Firebase handles this automatically via onAuthStateChanged) */
     checkSession: async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-            const profile = await fetchUserProfile(session.user.id);
+        const firebaseUser = auth.currentUser;
+        if (firebaseUser) {
+            const profile = await fetchUserProfile(firebaseUser.uid);
             set({
                 isAuthenticated: true,
                 user: {
                     ...(profile || {}),
-                    id: session.user.id,
-                    email: session.user.email,
-                    phone: session.user.phone,
+                    id: firebaseUser.uid,
+                    email: firebaseUser.email,
+                    phone: firebaseUser.phoneNumber,
                 },
-                session,
+                session: { user: firebaseUser },
             });
         }
         set({ isAuthChecking: false });
     },
 
-    // ── Email/Password Login (Admin) ──
+    // ── Email/Password Login (Admin/User) ──
     login: async (email, password) => {
         try {
-            const { data, error } = await supabase.auth.signInWithPassword({
-                email,
-                password,
-            });
-            if (error) throw error;
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            const firebaseUser = userCredential.user;
 
-            const profile = await fetchUserProfile(data.user.id);
+            const profile = await fetchUserProfile(firebaseUser.uid);
 
             set({
                 user: {
                     ...(profile || {}),
-                    id: data.user.id,
-                    email: data.user.email,
+                    id: firebaseUser.uid,
+                    email: firebaseUser.email,
                 },
                 isAuthenticated: true,
-                session: data.session,
+                session: { user: firebaseUser },
             });
             return { success: true, role: profile?.role || 'USER' };
         } catch (err) {
@@ -148,29 +147,28 @@ export const useAuthStore = create()(persist((set, get) => ({
         const { email, password, fullName, mobile, language } = userData;
 
         try {
-            const { data, error } = await supabase.auth.signUp({ email, password });
-            if (error) throw error;
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const firebaseUser = userCredential.user;
 
-            // Note: If email confirmation is required, session might be null here.
-            // But assuming we can proceed or that email confirmation is off for now.
-            if (data.user) {
+            if (firebaseUser) {
                 const profile = {
-                    id: data.user.id,
+                    id: firebaseUser.uid,
                     full_name: fullName,
                     mobile: mobile,
                     language: language || 'en',
                     role: 'USER',
                     email: email,
+                    status: 'active',
+                    created_at: new Date().toISOString()
                 };
-                await supabase.from('profiles').upsert(profile);
+                
+                await setDoc(doc(db, 'profiles', firebaseUser.uid), profile);
 
-                if (data.session) {
-                    set({
-                        user: { ...profile, id: data.user.id },
-                        isAuthenticated: true,
-                        session: data.session
-                    });
-                }
+                set({
+                    user: profile,
+                    isAuthenticated: true,
+                    session: { user: firebaseUser }
+                });
             }
             return { success: true };
         } catch (err) {
@@ -180,7 +178,7 @@ export const useAuthStore = create()(persist((set, get) => ({
     },
 
     logout: async () => {
-        await supabase.auth.signOut();
+        await signOut(auth);
         set({ user: null, isAuthenticated: false, session: null });
     },
 
@@ -188,11 +186,8 @@ export const useAuthStore = create()(persist((set, get) => ({
         const user = get().user;
         if (user) {
             try {
-                const { error } = await supabase
-                    .from('profiles')
-                    .update(data)
-                    .eq('id', user.id);
-                if (error) throw error;
+                const docRef = doc(db, 'profiles', user.id);
+                await updateDoc(docRef, data);
 
                 set({ user: { ...user, ...data } });
                 return { success: true };
@@ -222,9 +217,12 @@ export const useAuthStore = create()(persist((set, get) => ({
     // ── Admin user management ──
     getAllUsers: async () => {
         try {
-            const { data, error } = await supabase.from('profiles').select('*');
-            if (error) throw error;
-            return data || [];
+            const querySnapshot = await getDocs(collection(db, 'profiles'));
+            const users = [];
+            querySnapshot.forEach((doc) => {
+                users.push({ id: doc.id, ...doc.data() });
+            });
+            return users;
         } catch (err) {
             console.error('getAllUsers error:', err);
             return [];
@@ -242,23 +240,16 @@ export const useAuthStore = create()(persist((set, get) => ({
 
     toggleUserStatus: async (userId) => {
         try {
-            const { data: userDoc, error: fetchErr } = await supabase
-                .from('profiles')
-                .select('status')
-                .eq('id', userId)
-                .single();
+            const docRef = doc(db, 'profiles', userId);
+            const docSnap = await getDoc(docRef);
 
-            if (fetchErr) throw fetchErr;
+            if (!docSnap.exists()) throw new Error("User not found");
 
-            const currentStatus = userDoc.status || 'active';
+            const currentStatus = docSnap.data().status || 'active';
             const newStatus = currentStatus === 'active' ? 'blocked' : 'active';
 
-            const { error: updateErr } = await supabase
-                .from('profiles')
-                .update({ status: newStatus })
-                .eq('id', userId);
+            await updateDoc(docRef, { status: newStatus });
 
-            if (updateErr) throw updateErr;
             return { success: true, newStatus };
         } catch (err) {
             return { success: false, error: err.message };
@@ -267,11 +258,8 @@ export const useAuthStore = create()(persist((set, get) => ({
 
     updateUserRole: async (userId, newRole) => {
         try {
-            const { error } = await supabase
-                .from('profiles')
-                .update({ role: newRole })
-                .eq('id', userId);
-            if (error) throw error;
+            const docRef = doc(db, 'profiles', userId);
+            await updateDoc(docRef, { role: newRole });
             return { success: true };
         } catch (err) {
             return { success: false, error: err.message };
@@ -294,11 +282,9 @@ export const useAuthStore = create()(persist((set, get) => ({
 
     changePassword: async (oldPassword, newPassword) => {
         try {
-            // Supabase allows password update without old password if session is valid
-            const { error } = await supabase.auth.updateUser({
-                password: newPassword
-            });
-            if (error) throw error;
+            const user = auth.currentUser;
+            if (!user) throw new Error("No user logged in");
+            await updatePassword(user, newPassword);
             return { success: true };
         } catch (err) {
             return { success: false, error: err.message };
