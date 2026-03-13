@@ -134,12 +134,18 @@ export const useAuthStore = create()(persist((set, get) => ({
             const firebaseUser = userCredential.user;
 
             if (firebaseUser) {
+                // Determine role based on email for initial setup
+                let role = 'USER';
+                if (email === 'admin@schemesarthi.gov.in') role = 'SUPER_ADMIN';
+                else if (email === 'content@schemesarthi.gov.in') role = 'CONTENT_ADMIN';
+                else if (email === 'reviewer@schemesarthi.gov.in') role = 'REVIEW_ADMIN';
+
                 const profile = {
                     id: firebaseUser.uid,
                     fullName: fullName,
                     mobile: mobile,
                     language: language || 'en',
-                    role: 'USER',
+                    role: role,
                     email: email,
                     status: 'active',
                     created_at: new Date().toISOString()

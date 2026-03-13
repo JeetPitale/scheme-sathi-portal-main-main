@@ -54,7 +54,10 @@ const SchemeService = {
                     ...d,
                     // Map legacy field names if needed
                     name: d.name || d.scheme_name || "Untitled Scheme",
-                    status: d.status || 'active'
+                    status: d.status || 'active',
+                    isScheme: true,
+                    is_scheme: true,
+                    governmentLevel: d.governmentLevel || d.government_level || 'Central'
                 };
             });
 
@@ -85,7 +88,10 @@ const SchemeService = {
                     id: docSnap.id, 
                     ...d,
                     name: d.name || d.scheme_name || "Untitled Scheme",
-                    status: d.status || 'active'
+                    status: d.status || 'active',
+                    isScheme: true,
+                    is_scheme: true,
+                    governmentLevel: d.governmentLevel || d.government_level || 'Central'
                 };
             }
             return null;
@@ -106,7 +112,10 @@ const SchemeService = {
                     id: doc.id, 
                     ...d,
                     name: d.name || d.scheme_name || "Untitled Scheme",
-                    status: d.status || 'active'
+                    status: d.status || 'active',
+                    isScheme: true,
+                    is_scheme: true,
+                    governmentLevel: d.governmentLevel || d.government_level || 'Central'
                 };
             }
             // Fallback: search by generated slug from name or scheme_name if direct slug match fails
@@ -133,6 +142,8 @@ const SchemeService = {
             const newScheme = {
                 ...schemeData,
                 slug,
+                isScheme: true,
+                is_scheme: true,
                 status: schemeData.status || 'active',
                 created_at: serverTimestamp(),
                 updated_at: serverTimestamp()
