@@ -10,11 +10,13 @@ import { Label } from '@/components/ui/label';
 
 // Schema for validation
 const formSchema = z.object({
-    age: z.coerce.number().min(18, "Must be at least 18").max(100),
+    age: z.coerce.number().min(8, "Must be at least 8").max(110),
+    gender: z.string().min(1, "Gender is required"),
     state: z.string().min(1, "State is required"),
     category: z.string().min(1, "Category is required"),
     income: z.coerce.number().min(0, "Income must be positive"),
     occupation: z.string().min(1, "Occupation is required"),
+    education: z.string().min(1, "Education is required"),
     disabilityStatus: z.string().optional(),
 });
 
@@ -23,15 +25,19 @@ const EligibilityWizard = ({ onComplete }) => {
     const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm({
         resolver: zodResolver(formSchema),
         defaultValues: {
-            disabilityStatus: 'no'
+            disabilityStatus: 'no',
+            gender: 'Male',
+            education: 'Graduate'
         }
     });
 
     const onSubmit = (data) => {
-        // Transform data types if needed
         const payload = {
             ...data,
+            age: Number(data.age),
+            income: Number(data.income),
             isStudent: data.occupation === 'Student',
+            isFarmer: data.occupation === 'Farmer',
             hasDisability: data.disabilityStatus === 'yes'
         };
         onComplete(payload);
@@ -41,19 +47,42 @@ const EligibilityWizard = ({ onComplete }) => {
     const prevStep = () => setStep(s => s - 1);
 
     return (
-        <Card className="w-full max-w-2xl mx-auto">
-            <CardHeader>
-                <CardTitle>Check Eligibility - Step {step} of 2</CardTitle>
+        <Card className="w-full max-w-2xl mx-auto shadow-xl border-t-4 border-t-primary">
+            <CardHeader className="text-center">
+                <CardTitle className="text-2xl">Eligibility Check — Step {step} of 3</CardTitle>
+                <div className="w-full bg-gray-200 h-2 rounded-full mt-4">
+                    <div 
+                        className="bg-primary h-2 rounded-full transition-all duration-500" 
+                        style={{ width: `${(step / 3) * 100}%` }}
+                    />
+                </div>
             </CardHeader>
             <CardContent>
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
 
                     {step === 1 && (
                         <div className="space-y-4">
-                            <div>
-                                <Label htmlFor="age">Age</Label>
-                                <Input id="age" type="number" {...register('age')} placeholder="Enter your age" />
-                                {errors.age && <p className="text-red-500 text-sm">{errors.age.message}</p>}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <Label htmlFor="age">Age</Label>
+                                    <Input id="age" type="number" {...register('age')} placeholder="Enter your age" />
+                                    {errors.age && <p className="text-red-500 text-sm">{errors.age.message}</p>}
+                                </div>
+
+                                <div>
+                                    <Label htmlFor="gender">Gender</Label>
+                                    <Select onValueChange={(val) => setValue('gender', val)} defaultValue="Male">
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select Gender" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Male">Male</SelectItem>
+                                            <SelectItem value="Female">Female</SelectItem>
+                                            <SelectItem value="Other">Other</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    {errors.gender && <p className="text-red-500 text-sm">{errors.gender.message}</p>}
+                                </div>
                             </div>
 
                             <div>
@@ -106,18 +135,12 @@ const EligibilityWizard = ({ onComplete }) => {
                                 {errors.category && <p className="text-red-500 text-sm">{errors.category.message}</p>}
                             </div>
 
-                            <Button type="button" onClick={nextStep} className="w-full">Next</Button>
+                            <Button type="button" onClick={nextStep} className="w-full py-6 text-lg">Continue to Profile Details</Button>
                         </div>
                     )}
 
                     {step === 2 && (
                         <div className="space-y-4">
-                            <div>
-                                <Label htmlFor="income">Annual Family Income</Label>
-                                <Input id="income" type="number" {...register('income')} placeholder="e.g. 150000" />
-                                {errors.income && <p className="text-red-500 text-sm">{errors.income.message}</p>}
-                            </div>
-
                             <div>
                                 <Label htmlFor="occupation">Occupation</Label>
                                 <Select onValueChange={(val) => setValue('occupation', val)}>
@@ -130,9 +153,43 @@ const EligibilityWizard = ({ onComplete }) => {
                                         <SelectItem value="Employed">Employed</SelectItem>
                                         <SelectItem value="Unemployed">Unemployed</SelectItem>
                                         <SelectItem value="Business">Business</SelectItem>
+                                        <SelectItem value="Retired">Retired</SelectItem>
                                     </SelectContent>
                                 </Select>
                                 {errors.occupation && <p className="text-red-500 text-sm">{errors.occupation.message}</p>}
+                            </div>
+
+                            <div>
+                                <Label htmlFor="education">Education Level</Label>
+                                <Select onValueChange={(val) => setValue('education', val)} defaultValue="Graduate">
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select Education" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Below 10th">Below 10th</SelectItem>
+                                        <SelectItem value="10th Pass">10th Pass</SelectItem>
+                                        <SelectItem value="12th Pass">12th Pass</SelectItem>
+                                        <SelectItem value="Diploma">Diploma</SelectItem>
+                                        <SelectItem value="Graduate">Graduate</SelectItem>
+                                        <SelectItem value="Post Graduate">Post Graduate</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                {errors.education && <p className="text-red-500 text-sm">{errors.education.message}</p>}
+                            </div>
+
+                            <div className="flex gap-4">
+                                <Button type="button" variant="outline" onClick={prevStep} className="w-1/2">Back</Button>
+                                <Button type="button" onClick={nextStep} className="w-1/2">Next</Button>
+                            </div>
+                        </div>
+                    )}
+
+                    {step === 3 && (
+                        <div className="space-y-4">
+                            <div>
+                                <Label htmlFor="income">Annual Family Income (₹)</Label>
+                                <Input id="income" type="number" {...register('income')} placeholder="e.g. 150000" />
+                                {errors.income && <p className="text-red-500 text-sm">{errors.income.message}</p>}
                             </div>
 
                             <div>

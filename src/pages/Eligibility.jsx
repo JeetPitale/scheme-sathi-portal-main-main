@@ -5,7 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, useApplicationStore } from '@/lib/store';
+import { useSchemeStore } from '@/stores/schemeStore';
+import RecommendationService from '@/services/RecommendationService';
+import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
 
 const Eligibility = () => {
     const [results, setResults] = useState(null);
@@ -13,50 +17,37 @@ const Eligibility = () => {
     const [error, setError] = useState(null);
 
     const { user } = useAuthStore();
+    const { schemes, loadSchemes } = useSchemeStore();
+    const { applications, loadApplications } = useApplicationStore();
 
     const handleCheck = async (userData) => {
         setLoading(true);
         setError(null);
         try {
-            // 1. Validate & Transform Data
-            const payload = {
-                ...userData,
-                age: Number(userData.age),
-                income: Number(userData.income),
-                userId: user?.id || null, // Inject user ID if available
-            };
+            // 1. Ensure data is loaded
+            await Promise.all([
+                loadSchemes(),
+                loadApplications()
+            ]);
 
-            if (isNaN(payload.age) || isNaN(payload.income)) {
-                throw new Error("Invalid Age or Income. Please enter valid numbers.");
+            const currentSchemes = useSchemeStore.getState().schemes;
+            const currentApps = useApplicationStore.getState().applications;
+            const appliedIds = currentApps.map(a => a.schemeId);
+
+            // 2. Run the Intelligent Recommendation Engine
+            const recommendations = RecommendationService.recommend(
+                userData, 
+                currentSchemes, 
+                appliedIds
+            );
+
+            if (recommendations.length === 0) {
+                toast.info("No matching schemes found for your profile.");
+            } else {
+                toast.success(`Found ${recommendations.length} matching schemes!`);
             }
 
-            console.log("Checking eligibility for:", payload);
-
-            const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
-            let data;
-
-            try {
-                // 2. Attempt API Call
-                const response = await fetch(`${apiBaseUrl}/api/eligibility/check`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!response.ok) throw new Error(`API Error: ${response.status}`);
-                data = await response.json();
-
-            } catch (apiErr) {
-                // 3. Fallback: Local Logic if API fails (e.g. localhost:5000 offline)
-                console.warn("API failed, using local fallback logic:", apiErr);
-                data = runLocalEligibilityCheck(payload);
-            }
-
-            if (!data || !data.recommendations) {
-                throw new Error("No recommendation data received");
-            }
-
-            setResults(data.recommendations);
+            setResults(recommendations);
         } catch (err) {
             console.error("Eligibility Check Failed:", err);
             setError(err.message || "Failed to check eligibility. Please try again.");
@@ -130,43 +121,68 @@ const Eligibility = () => {
                 )}
 
                 {results && (
-                    <div className="max-w-4xl mx-auto">
-                        <Button onClick={reset} variant="ghost" className="mb-4">← Check for another person</Button>
-
-                        <h2 className="text-2xl font-semibold mb-4">Your Recommendations</h2>
-
-                        <div className="grid gap-4">
-                            {results.map((item) => (
-                                <Card key={item.schemeId} className={item.score === 100 ? "border-green-500" : "border-gray-200"}>
-                                    <CardHeader>
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <CardTitle>{item.name}</CardTitle>
-                                                <CardDescription>
-                                                    Status: <span className={
-                                                        item.status === 'Fully Eligible' ? 'text-green-600 font-bold' :
-                                                            item.status === 'Partially Eligible' ? 'text-yellow-600 font-bold' : 'text-red-500 font-bold'
-                                                    }>{item.status} ({item.score}%)</span>
-                                                </CardDescription>
-                                            </div>
-                                            {item.status === 'Fully Eligible' ? <CheckCircle className="text-green-500" /> :
-                                                item.status === 'Partially Eligible' ? <AlertCircle className="text-yellow-500" /> : <XCircle className="text-red-400" />}
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent>
-                                        {item.matched.length > 0 && (
-                                            <p className="text-sm text-green-700">✓ Matched: {item.matched.join(', ')}</p>
-                                        )}
-                                        {item.failed.length > 0 && (
-                                            <p className="text-sm text-red-600">✗ Failed: {item.failed.join(', ')}</p>
-                                        )}
-                                        {item.missing.length > 0 && (
-                                            <p className="text-sm text-yellow-600">? Missing Info: {item.missing.join(', ')}</p>
-                                        )}
-                                    </CardContent>
-                                </Card>
-                            ))}
+                    <div className="max-w-4xl mx-auto space-y-6">
+                        <div className="flex justify-between items-center">
+                            <Button onClick={reset} variant="outline">← Try different profile</Button>
+                            <span className="text-sm font-medium text-muted-foreground">
+                                Based on {results.length} matched criteria
+                            </span>
                         </div>
+
+                        {results.length === 0 ? (
+                            <Card className="bg-slate-50 border-dashed border-2 py-12 text-center">
+                                <CardContent>
+                                    <AlertCircle className="mx-auto h-12 w-12 text-slate-300 mb-4" />
+                                    <h3 className="text-lg font-medium">No matches found</h3>
+                                    <p className="text-muted-foreground mt-2">Try adjusting your filters or expanding your search.</p>
+                                </CardContent>
+                            </Card>
+                        ) : (
+                            <div className="grid gap-6">
+                                {results.map((scheme) => (
+                                    <Card key={scheme.id} className="overflow-hidden hover:shadow-lg transition-shadow border-l-4 border-l-green-500">
+                                        <CardHeader className="pb-3 px-6">
+                                            <div className="flex justify-between items-start">
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <CardTitle className="text-xl font-bold">{scheme.name}</CardTitle>
+                                                        <Badge variant="secondary" className="bg-green-100 text-green-700">
+                                                            {scheme.relevanceScore}% Match
+                                                        </Badge>
+                                                    </div>
+                                                    <CardDescription className="text-base line-clamp-2">
+                                                        {scheme.description}
+                                                    </CardDescription>
+                                                </div>
+                                                <CheckCircle className="text-green-500 h-6 w-6 shrink-0" />
+                                            </div>
+                                        </CardHeader>
+                                        <CardContent className="px-6 pb-6">
+                                            <div className="bg-slate-50 rounded-lg p-4 mb-4 border border-slate-100">
+                                                <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                                                    Recommended because:
+                                                </h4>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                    {scheme.recommendationData.reasons.map((reason, idx) => (
+                                                        <div key={idx} className="flex items-center text-sm text-green-700 font-medium">
+                                                            <CheckCircle className="h-4 w-4 mr-2" />
+                                                            {reason}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+                                                <div className="text-sm text-muted-foreground">
+                                                    <strong>Benefits:</strong> {scheme.benefits || "Refer to scheme document"}
+                                                </div>
+                                                <Button size="lg" className="px-8 shadow-md">Apply Now</Button>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
