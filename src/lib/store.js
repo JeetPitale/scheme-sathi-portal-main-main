@@ -71,50 +71,29 @@ export const useAuthStore = create()(persist((set, get) => ({
 
     /** Initialize Firebase onAuthStateChanged listener */
     initAuthListener: () => {
-        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        return onAuthStateChanged(auth, async (firebaseUser) => {
+            set({ isAuthChecking: true });
             if (firebaseUser) {
                 const profile = await fetchUserProfile(firebaseUser.uid);
-                set({
-                    user: {
-                        ...(profile || {}),
-                        id: firebaseUser.uid,
-                        email: firebaseUser.email,
-                        phone: firebaseUser.phoneNumber,
-                    },
-                    isAuthenticated: true,
-                    isAuthChecking: false,
-                    session: { user: firebaseUser }, // Mapping to match previous structure
-                });
-            } else {
-                set({
-                    user: null,
-                    isAuthenticated: false,
-                    isAuthChecking: false,
-                    session: null,
-                });
-            }
-        });
-        return unsubscribe;
-    },
-
-    /** Check current session (Firebase handles this automatically via onAuthStateChanged) */
-    checkSession: async () => {
-        const firebaseUser = auth.currentUser;
-        if (firebaseUser) {
-            const profile = await fetchUserProfile(firebaseUser.uid);
-            set({
-                isAuthenticated: true,
-                user: {
-                    ...(profile || {}),
+                const userData = profile ? {
+                    ...profile,
+                    id: firebaseUser.uid,
+                    email: firebaseUser.email
+                } : {
                     id: firebaseUser.uid,
                     email: firebaseUser.email,
-                    phone: firebaseUser.phoneNumber,
-                },
-                session: { user: firebaseUser },
-            });
-        }
-        set({ isAuthChecking: false });
+                    fullName: firebaseUser.displayName,
+                    role: 'USER',
+                    status: 'active'
+                };
+                set({ user: userData, isAuthenticated: true, isAuthChecking: false });
+            } else {
+                set({ user: null, isAuthenticated: false, isAuthChecking: false });
+            }
+        });
     },
+
+
 
     // ── Email/Password Login (Admin/User) ──
     login: async (email, password) => {
@@ -153,7 +132,7 @@ export const useAuthStore = create()(persist((set, get) => ({
             if (firebaseUser) {
                 const profile = {
                     id: firebaseUser.uid,
-                    full_name: fullName,
+                    fullName: fullName,
                     mobile: mobile,
                     language: language || 'en',
                     role: 'USER',
@@ -295,8 +274,6 @@ export const useAuthStore = create()(persist((set, get) => ({
     partialize: (state) => ({
         language: state.language,
         user: state.user,
-        isAuthenticated: state.isAuthenticated,
-        session: state.session,
     }),
 }));
 
@@ -348,9 +325,6 @@ export const useApplicationStore = create((set, get) => ({
                 // Optimistically update the UI arrays
                 set((state) => ({
                     applications: state.applications.map(app =>
-                        app.id === appId ? { ...app, status: status.toLowerCase().replace(' ', '_'), remarks } : app
-                    ),
-                    userApplications: state.userApplications.map(app =>
                         app.id === appId ? { ...app, status: status.toLowerCase().replace(' ', '_'), remarks } : app
                     )
                 }));

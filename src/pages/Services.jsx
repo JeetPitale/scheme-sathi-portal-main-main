@@ -153,7 +153,7 @@ const Services = () => {
             <label className="text-sm font-medium text-foreground mb-1.5 block">{t('category')}</label>
             <select
               value={selectedCategory}
-              onChange={(e) => { setSelectedCategory(e.target.value); setCurrentPage(1); setSearchQuery(''); }}
+              onChange={(e) => { setSelectedCategory(e.target.value); setPage(1); setSearchQuery(''); }}
               className="w-full border rounded-md px-3 py-2 bg-background text-foreground text-sm"
             >
               <option value="">{t('allCategories')}</option>
@@ -187,7 +187,7 @@ const Services = () => {
           {selectedState && ` for ${states.find(s => s.id === selectedState)?.name || selectedState}`}
         </p>
         {selectedCategory && (
-          <Button variant="ghost" size="sm" onClick={() => { setSelectedCategory(''); setCurrentPage(1); }}>
+          <Button variant="ghost" size="sm" onClick={() => { setSelectedCategory(''); setPage(1); }}>
             {t('clearFilter')}
           </Button>
         )}
@@ -208,7 +208,7 @@ const Services = () => {
           </div>
 
           {/* Empty State */}
-          {displayedServices.length === 0 && (
+          {paginatedServices.length === 0 && (
             <div className="text-center py-16">
               <p className="text-muted-foreground text-lg mb-2">{t('noServicesFound')}</p>
               <p className="text-sm text-muted-foreground">{t('tryAdjustingSearch')}</p>
