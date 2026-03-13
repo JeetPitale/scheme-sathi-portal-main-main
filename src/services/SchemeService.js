@@ -21,6 +21,62 @@ import {
 } from 'firebase/firestore';
 
 const COLLECTION = 'schemes';
+const LOCAL_SCHEMES = [
+    {
+        id: 'mock-1',
+        name: 'Pradhan Mantri Jan Dhan Yojana (PMJDY)',
+        description: 'National Mission for Financial Inclusion to ensure access to financial services, namely, basic savings & deposit accounts, remittance, credit, insurance, pension in an affordable manner.',
+        category: 'tax-finance',
+        state: 'central',
+        government_level: 'Central',
+        status: 'active',
+        isScheme: true,
+        is_scheme: true,
+        slug: 'pm-jan-dhan-yojana',
+        benefits: {
+            financial_assistance: 'Interest on deposit, Accidental insurance cover of Rs.1 lakh, no minimum balance required.',
+            non_financial_support: 'Access to pension and insurance products.'
+        },
+        eligibility: { minAge: 10, categories: ['General', 'OBC', 'SC', 'ST'] },
+        documents_required: ['Aadhaar Card', 'PAN Card', 'Voter ID', 'Driving License']
+    },
+    {
+        id: 'mock-2',
+        name: 'Atal Pension Yojana (APY)',
+        description: 'A pension scheme for citizens of India focused on the unorganized sector workers.',
+        category: 'pensions',
+        state: 'central',
+        government_level: 'Central',
+        status: 'active',
+        isScheme: true,
+        is_scheme: true,
+        slug: 'atal-pension-yojana',
+        benefits: {
+            financial_assistance: 'Guaranteed minimum pension of Rs. 1,000 to Rs. 5,000 per month after age 60.',
+            non_financial_support: 'Social security for old age.'
+        },
+        eligibility: { minAge: 18, maxAge: 40, categories: ['General', 'OBC', 'SC', 'ST'] },
+        documents_required: ['Aadhaar Card', 'Savings Bank Account']
+    },
+    {
+        id: 'mock-3',
+        name: 'PM-Kisan Samman Nidhi',
+        description: 'An initiative by the government of India in which all farmers will get up to ₹6,000 per year as minimum income support.',
+        category: 'agriculture',
+        state: 'central',
+        government_level: 'Central',
+        status: 'active',
+        isScheme: true,
+        is_scheme: true,
+        slug: 'pm-kisan-samman-nidhi',
+        benefits: {
+            financial_assistance: 'Direct income support of Rs. 6,000 per year in three equal installments.',
+            non_financial_support: 'Financial stability for small and marginal farmers.'
+        },
+        eligibility: { categories: ['Small and Marginal Farmers'], states: ['central'] },
+        documents_required: ['Aadhaar Card', 'Land Holding Documents', 'Bank Account']
+    }
+];
 
 let _cache = null;
 let _cacheTimestamp = 0;
@@ -47,7 +103,7 @@ const SchemeService = {
             // Remove orderBy('name') to ensure documents missing the field are still returned
             const q = query(collection(db, COLLECTION));
             const snapshot = await getDocs(q);
-            const data = snapshot.docs.map(doc => {
+            const firestoreData = snapshot.docs.map(doc => {
                 const d = doc.data();
                 return { 
                     id: doc.id, 
@@ -60,6 +116,13 @@ const SchemeService = {
                     governmentLevel: d.governmentLevel || d.government_level || 'Central'
                 };
             });
+
+            // Combine local schemes with firestore schemes
+            // Filter out local schemes that might have been seeded already (by name)
+            const seededNames = new Set(firestoreData.map(s => s.name.toLowerCase()));
+            const uniqueLocal = LOCAL_SCHEMES.filter(ls => !seededNames.has(ls.name.toLowerCase()));
+            
+            const data = [...firestoreData, ...uniqueLocal];
 
             // Sort in memory
             data.sort((a, b) => a.name.localeCompare(b.name));
@@ -94,6 +157,10 @@ const SchemeService = {
                     governmentLevel: d.governmentLevel || d.government_level || 'Central'
                 };
             }
+            // Fallback to local schemes if not in Firestore
+            const local = LOCAL_SCHEMES.find(ls => ls.id === id);
+            if (local) return local;
+
             return null;
         } catch (error) {
             console.error(`SchemeService.getById(${id}) error:`, error);
