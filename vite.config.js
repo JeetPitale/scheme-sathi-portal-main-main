@@ -73,9 +73,8 @@ export default defineConfig(({ mode }) => ({
         rollupOptions: {
             output: {
                 manualChunks: {
-                    'vendor': ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'],
+                    'vendor': ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query', 'firebase'],
                     'ui': ['lucide-react', 'clsx', 'tailwind-merge'],
-                    'supabase': ['@supabase/supabase-js'],
                     'store': ['zustand']
                 }
             }
