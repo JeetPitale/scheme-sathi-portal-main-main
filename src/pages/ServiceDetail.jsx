@@ -263,7 +263,7 @@ const ServiceDetail = () => {
             <div>
               <h3 className="font-semibold text-foreground mb-2">{t('requiredDocuments')}</h3>
               <ul className="list-disc list-inside text-muted-foreground space-y-1">
-                {service.documents.map((doc) => (<li key={doc}>{doc}</li>))}
+                {service.documents?.map((doc) => (<li key={doc}>{doc}</li>))}
               </ul>
             </div>
 
@@ -354,7 +354,7 @@ const ServiceDetail = () => {
             </p>
           </div>
 
-          {service.documents.map((doc) => (<div key={doc} className="flex items-center justify-between p-4 border rounded-lg">
+          {service.documents?.map((doc) => (<div key={doc} className="flex items-center justify-between p-4 border rounded-lg">
             <div className="flex items-center gap-3">
               <FileText className="h-5 w-5 text-muted-foreground" />
               <span className="text-foreground">{doc}</span>
