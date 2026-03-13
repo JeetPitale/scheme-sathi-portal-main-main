@@ -6,7 +6,7 @@ import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where, serv
 import NotificationService from '@/services/NotificationService';
 import AuditService, { AUDIT_ACTIONS } from '@/services/AuditService';
 import { isAdminRole } from '@/lib/rbac';
-import { createApplication, getUserApplications } from '@/lib/applicationService';
+import { createApplication, getUserApplications, updateApplicationStatus as updateAppStatusFirestore } from '@/lib/applicationService';
 
 // ════════════════════════════════════════
 // Theme Store (unchanged)
@@ -343,7 +343,7 @@ export const useApplicationStore = create((set, get) => ({
 
     updateApplicationStatus: async (appId, status, remarks) => {
         try {
-            const result = await applicationService.updateApplicationStatus(appId, status, remarks);
+            const result = await updateAppStatusFirestore(appId, status, remarks);
             if (result.success) {
                 // Optimistically update the UI arrays
                 set((state) => ({
