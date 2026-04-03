@@ -119,7 +119,7 @@ const SchemeService = {
             })();
 
             const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Firestore fetch timeout')), 5000)
+                setTimeout(() => reject(new Error('Firestore fetch timeout')), 15000)
             );
 
             const firestoreData = await Promise.race([fetchPromise, timeoutPromise]);
@@ -176,7 +176,7 @@ const SchemeService = {
             })();
 
             const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Firestore fetch timeout')), 5000)
+                setTimeout(() => reject(new Error('Firestore fetch timeout')), 15000)
             );
 
             const result = await Promise.race([fetchPromise, timeoutPromise]);
@@ -215,7 +215,7 @@ const SchemeService = {
             })();
 
             const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Firestore fetch timeout')), 5000)
+                setTimeout(() => reject(new Error('Firestore fetch timeout')), 15000)
             );
 
             const result = await Promise.race([fetchPromise, timeoutPromise]);
