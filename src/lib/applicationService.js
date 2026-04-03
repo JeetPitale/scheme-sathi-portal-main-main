@@ -1,72 +1,43 @@
 /**
  * applicationService — Create and fetch user applications
- * Backed by Firebase `applications` collection.
+ * Backed by Express MongoDB backend API.
  */
 
-import { db } from '@/lib/firebase';
-import { collection, addDoc, getDocs, updateDoc, query, where, orderBy, doc, getDoc, serverTimestamp } from 'firebase/firestore';
-
-const COLLECTION = 'applications';
+// We assume the backend is running on port 5001. In production, this should be an environment variable.
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
 /**
- * Generates a unique Application ID in the format SSA-YYYY-XXXXX
- */
-export const generateApplicationId = () => {
-    const year = new Date().getFullYear();
-    const randomStr = Math.floor(10000 + Math.random() * 90000); // 5 digit random
-    return `SSA-${year}-${randomStr}`;
-};
-
-/**
- * Creates a new application in Firebase
+ * Creates a new application in MongoDB Backend
  * @param {Object} payload The application data payload
  * @returns {Promise<{success: boolean, data?: any, error?: string}>}
  */
 export const createApplication = async (payload) => {
     try {
-        let appId = generateApplicationId();
-        let isUnique = false;
-        let attempts = 0;
-
-        // Retry loop to ensure zero collisions
-        while (!isUnique && attempts < 3) {
-            const q = query(collection(db, COLLECTION), where("application_id", "==", appId));
-            const querySnapshot = await getDocs(q);
-
-            if (querySnapshot.empty) {
-                isUnique = true;
-            } else {
-                appId = generateApplicationId();
-                attempts++;
-            }
-        }
-
-        if (!isUnique) {
-            return { success: false, error: "Failed to generate a unique Application ID. Please try again." };
-        }
-
-        const applicationRecord = {
-            application_id: appId,
-            user_id: payload.userId,
-            scheme_id: payload.serviceId || payload.scheme_id,
-            scheme_name: payload.serviceName || payload.scheme_name,
-            status: 'Pending',
-            form_data: payload.formData || {},
-            submitted_at: serverTimestamp()
-        };
-
-        const docRef = await addDoc(collection(db, COLLECTION), applicationRecord);
-        const newDoc = await getDoc(docRef);
+        const response = await fetch(`${API_URL}/applications`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: payload.userId,
+                scheme_id: payload.serviceId || payload.scheme_id,
+                scheme_name: payload.serviceName || payload.scheme_name,
+                form_data: payload.formData || {}
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (!data.success) throw new Error(data.error);
 
         return {
             success: true,
             data: {
-                ...newDoc.data(),
-                id: appId,
-                internalId: docRef.id,
-                userId: payload.userId,
-                serviceId: payload.serviceId || payload.scheme_id,
-                serviceName: payload.serviceName || payload.scheme_name,
+                ...data.data,
+                id: data.data.application_id, // Map for frontend convenience
+                userId: data.data.user_id,
+                serviceId: data.data.scheme_id,
+                serviceName: data.data.scheme_name,
+                status: data.data.status.toLowerCase().replace(' ', '_'),
+                dateApplied: data.data.submitted_at
             },
         };
     } catch (error) {
@@ -82,28 +53,22 @@ export const createApplication = async (payload) => {
  */
 export const getUserApplications = async (userId) => {
     try {
-        const q = query(
-            collection(db, COLLECTION),
-            where("user_id", "==", userId)
-        );
-        const querySnapshot = await getDocs(q);
+        const response = await fetch(`${API_URL}/applications/user/${userId}`);
+        const data = await response.json();
+        
+        if (!data.success) throw new Error(data.error);
 
-        const mapped = querySnapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-                id: data.application_id,
-                internalId: doc.id,
-                userId: data.user_id,
-                serviceId: data.scheme_id,
-                serviceName: data.scheme_name,
-                status: (data.status || '').toLowerCase().replace(' ', '_'),
-                dateApplied: data.submitted_at?.toDate()?.toISOString() || new Date().toISOString(),
-                formData: data.form_data,
-                remarks: data.remarks,
-            };
-        });
-        // Sort so the latest applications pop up at the top
-        mapped.sort((a, b) => new Date(b.dateApplied) - new Date(a.dateApplied));
+        const mapped = data.data.map(app => ({
+            id: app.application_id,
+            internalId: app._id,
+            userId: app.user_id,
+            serviceId: app.scheme_id,
+            serviceName: app.scheme_name,
+            status: (app.status || '').toLowerCase().replace(' ', '_'),
+            dateApplied: app.submitted_at,
+            formData: app.form_data,
+            remarks: app.remarks,
+        }));
 
         return { success: true, data: mapped };
     } catch (error) {
@@ -118,26 +83,22 @@ export const getUserApplications = async (userId) => {
  */
 export const getAllApplications = async () => {
     try {
-        const q = query(
-            collection(db, COLLECTION),
-            orderBy("submitted_at", "desc")
-        );
-        const querySnapshot = await getDocs(q);
+        const response = await fetch(`${API_URL}/applications`);
+        const data = await response.json();
+        
+        if (!data.success) throw new Error(data.error);
 
-        const mapped = querySnapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-                id: data.application_id,
-                internalId: doc.id,
-                userId: data.user_id,
-                serviceId: data.scheme_id,
-                serviceName: data.scheme_name,
-                status: (data.status || '').toLowerCase().replace(' ', '_'),
-                dateApplied: data.submitted_at?.toDate()?.toISOString() || new Date().toISOString(),
-                formData: data.form_data,
-                remarks: data.remarks,
-            };
-        });
+        const mapped = data.data.map(app => ({
+            id: app.application_id,
+            internalId: app._id,
+            userId: app.user_id,
+            serviceId: app.scheme_id,
+            serviceName: app.scheme_name,
+            status: (app.status || '').toLowerCase().replace(' ', '_'),
+            dateApplied: app.submitted_at,
+            formData: app.form_data,
+            remarks: app.remarks,
+        }));
 
         return { success: true, data: mapped };
     } catch (error) {
@@ -148,21 +109,16 @@ export const getAllApplications = async () => {
 
 export const updateApplicationStatus = async (appId, newStatus, remarks = null) => {
     try {
-        const updateData = { status: newStatus };
-        if (remarks !== null) updateData.remarks = remarks;
+        const response = await fetch(`${API_URL}/applications/${appId}/status`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus, remarks })
+        });
+        
+        const data = await response.json();
+        if (!data.success) throw new Error(data.error);
 
-        // First find the doc by application_id
-        const q = query(collection(db, COLLECTION), where("application_id", "==", appId));
-        const querySnapshot = await getDocs(q);
-
-        if (querySnapshot.empty) {
-            throw new Error("Application not found");
-        }
-
-        const docRef = doc(db, COLLECTION, querySnapshot.docs[0].id);
-        await updateDoc(docRef, updateData);
-
-        return { success: true, data: { ...querySnapshot.docs[0].data(), ...updateData } };
+        return { success: true, data: data.data };
     } catch (err) {
         console.error("Update application failed:", err);
         return { success: false, error: err.message };

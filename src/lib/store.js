@@ -32,38 +32,17 @@ function applyTheme(theme) {
     else root.classList.remove('dark');
 }
 
-// ════════════════════════════════════════
-// Helper: Fetch user profile from Firebase profiles collection
-// ════════════════════════════════════════
-async function fetchUserProfile(uid) {
-    try {
-        // Add a 5-second timeout to prevent UI hang if Firestore is unreachable
-        const profilePromise = (async () => {
-            const docRef = doc(db, 'profiles', uid);
-            const docSnap = await getDoc(docRef);
-            return docSnap.exists() ? docSnap.data() : null;
-        })();
-
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout')), 5000)
-        );
-
-        return await Promise.race([profilePromise, timeoutPromise]);
-    } catch (err) {
-        console.error('Profile fetch error:', err.message);
-        return null;
-    }
-}
+import { login as apiLogin, register as apiRegister, getProfile } from '@/lib/authService';
 
 // ════════════════════════════════════════
-// Auth Store — Firebase Auth + Firestore profiles
+// Auth Store — Express MongoDB backend
 // ════════════════════════════════════════
 export const useAuthStore = create()(persist((set, get) => ({
     user: null,
     isAuthenticated: false,
     isAuthChecking: true,
     language: 'en',
-    session: null,
+    session: null, // holds token
 
     setUser: (user) => set({ user, isAuthenticated: !!user }),
 
@@ -73,101 +52,63 @@ export const useAuthStore = create()(persist((set, get) => ({
         if (user) set({ user: { ...user, language } });
     },
 
-    /** Initialize Firebase onAuthStateChanged listener */
-    initAuthListener: () => {
-        return onAuthStateChanged(auth, async (firebaseUser) => {
-            set({ isAuthChecking: true });
-            if (firebaseUser) {
-                const profile = await fetchUserProfile(firebaseUser.uid);
-                const userData = profile ? {
-                    ...profile,
-                    id: firebaseUser.uid,
-                    email: firebaseUser.email
-                } : {
-                    id: firebaseUser.uid,
-                    email: firebaseUser.email,
-                    fullName: firebaseUser.displayName,
-                    role: 'USER',
-                    status: 'active'
-                };
-                set({ user: userData, isAuthenticated: true, isAuthChecking: false });
-            } else {
-                set({ user: null, isAuthenticated: false, isAuthChecking: false });
+    /** Initialize listener — check local storage token */
+    initAuthListener: async () => {
+        set({ isAuthChecking: true });
+        const token = get().session?.token;
+        if (token) {
+            try {
+                const res = await getProfile(token);
+                if (res.success) {
+                    set({ user: res.data, isAuthenticated: true, isAuthChecking: false });
+                } else {
+                    set({ user: null, isAuthenticated: false, session: null, isAuthChecking: false });
+                }
+            } catch {
+                set({ user: null, isAuthenticated: false, session: null, isAuthChecking: false });
             }
-        });
+        } else {
+            set({ user: null, isAuthenticated: false, isAuthChecking: false });
+        }
     },
-
-
 
     // ── Email/Password Login (Admin/User) ──
     login: async (email, password) => {
         try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            const firebaseUser = userCredential.user;
-
-            const profile = await fetchUserProfile(firebaseUser.uid);
-
-            set({
-                user: {
-                    ...(profile || {}),
-                    id: firebaseUser.uid,
-                    email: firebaseUser.email,
-                },
-                isAuthenticated: true,
-                session: { user: firebaseUser },
-            });
-            return { success: true, role: profile?.role || 'USER' };
+            const res = await apiLogin(email, password);
+            if (res.success) {
+                set({
+                    user: res.data,
+                    isAuthenticated: true,
+                    session: { token: res.data.token }
+                });
+                return { success: true, role: res.data.role || 'USER' };
+            }
+            return { success: false, error: res.error || 'Login Failed' };
         } catch (err) {
-            if (import.meta.env.DEV) console.error('Login error:', err);
             return { success: false, error: err.message };
         }
     },
 
-
-
     /** Register new user (email/password) */
     register: async (userData) => {
-        const { email, password, fullName, mobile, language } = userData;
-
         try {
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-            const firebaseUser = userCredential.user;
-
-            if (firebaseUser) {
-                // Determine role based on email for initial setup
-                let role = 'USER';
-                if (email === 'admin@schemesarthi.gov.in') role = 'SUPER_ADMIN';
-                else if (email === 'content@schemesarthi.gov.in') role = 'CONTENT_ADMIN';
-                else if (email === 'reviewer@schemesarthi.gov.in') role = 'REVIEW_ADMIN';
-
-                const profile = {
-                    id: firebaseUser.uid,
-                    fullName: fullName,
-                    mobile: mobile,
-                    language: language || 'en',
-                    role: role,
-                    email: email,
-                    status: 'active',
-                    created_at: new Date().toISOString()
-                };
-                
-                await setDoc(doc(db, 'profiles', firebaseUser.uid), profile);
-
+            const res = await apiRegister(userData);
+            if (res.success) {
                 set({
-                    user: profile,
+                    user: res.data,
                     isAuthenticated: true,
-                    session: { user: firebaseUser }
+                    session: { token: res.data.token }
                 });
+                return { success: true };
             }
-            return { success: true };
+            return { success: false, error: res.error || 'Registration Failed' };
         } catch (err) {
-            if (import.meta.env.DEV) console.error('Registration error:', err);
             return { success: false, error: err.message };
         }
     },
 
     logout: async () => {
-        await signOut(auth);
         set({ user: null, isAuthenticated: false, session: null });
     },
 
@@ -175,9 +116,7 @@ export const useAuthStore = create()(persist((set, get) => ({
         const user = get().user;
         if (user) {
             try {
-                const docRef = doc(db, 'profiles', user.id);
-                await updateDoc(docRef, data);
-
+                // To be implemented in MongoDB
                 set({ user: { ...user, ...data } });
                 return { success: true };
             } catch (err) {
@@ -191,7 +130,6 @@ export const useAuthStore = create()(persist((set, get) => ({
     adminLogin: async (email, password) => {
         const result = await get().login(email, password);
         if (result.success) {
-            // Verify user has an admin role
             const user = get().user;
             if (!user?.role || !isAdminRole(user.role)) {
                 await get().logout();
@@ -205,85 +143,34 @@ export const useAuthStore = create()(persist((set, get) => ({
 
     // ── Admin user management ──
     getAllUsers: async () => {
-        try {
-            const querySnapshot = await getDocs(collection(db, 'profiles'));
-            const users = [];
-            querySnapshot.forEach((doc) => {
-                users.push({ id: doc.id, ...doc.data() });
-            });
-            return users;
-        } catch (err) {
-            console.error('getAllUsers error:', err);
-            return [];
-        }
+        return []; // To be implemented in MongoDB User Routes
     },
 
     getAdminUsers: async () => {
-        try {
-            const allUsers = await get().getAllUsers();
-            return allUsers.filter(u => isAdminRole(u.role));
-        } catch {
-            return [];
-        }
+        return [];
     },
 
     toggleUserStatus: async (userId) => {
-        try {
-            const docRef = doc(db, 'profiles', userId);
-            const docSnap = await getDoc(docRef);
-
-            if (!docSnap.exists()) throw new Error("User not found");
-
-            const currentStatus = docSnap.data().status || 'active';
-            const newStatus = currentStatus === 'active' ? 'blocked' : 'active';
-
-            await updateDoc(docRef, { status: newStatus });
-
-            return { success: true, newStatus };
-        } catch (err) {
-            return { success: false, error: err.message };
-        }
+        return { success: false, error: "Not implemented in MongoDB yet" };
     },
 
     updateUserRole: async (userId, newRole) => {
-        try {
-            const docRef = doc(db, 'profiles', userId);
-            await updateDoc(docRef, { role: newRole });
-            return { success: true };
-        } catch (err) {
-            return { success: false, error: err.message };
-        }
+        return { success: false, error: "Not implemented in MongoDB yet" };
     },
 
     getUserStats: async () => {
-        try {
-            const allUsers = await get().getAllUsers();
-            const today = new Date().toISOString().split('T')[0];
-            return {
-                total: allUsers.length,
-                active: allUsers.filter(u => u.status !== 'blocked').length,
-                newToday: allUsers.filter(u => u.created_at?.startsWith(today)).length,
-            };
-        } catch {
-            return { total: 0, active: 0, newToday: 0 };
-        }
+        return { total: 0, active: 0, newToday: 0 };
     },
 
     changePassword: async (oldPassword, newPassword) => {
-        try {
-            const user = auth.currentUser;
-            if (!user) throw new Error("No user logged in");
-            await updatePassword(user, newPassword);
-            return { success: true };
-        } catch (err) {
-            return { success: false, error: err.message };
-        }
+        return { success: false, error: "Not implemented in MongoDB yet" };
     },
 }), {
     name: 'scheme-sarthi-auth',
     partialize: (state) => ({
         language: state.language,
         user: state.user,
+        session: state.session
     }),
 }));
 

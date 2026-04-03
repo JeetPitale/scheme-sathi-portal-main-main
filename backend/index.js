@@ -13,6 +13,8 @@ app.use(cors());
 app.use(express.json());
 
 import eligibilityRoutes from './routes/eligibilityRoutes.js';
+import applicationRoutes from './routes/applicationRoutes.js';
+import authRoutes from './routes/authRoutes.js';
 
 // Connect to Database
 connectDB();
@@ -20,6 +22,8 @@ connectDB();
 // Routes
 app.use('/api/eligibility', eligibilityRoutes);
 app.use('/api/schemes', eligibilityRoutes); // Optional alias or separate if needed
+app.use('/api/applications', applicationRoutes);
+app.use('/api/auth', authRoutes);
 
 // Basic Route
 app.get('/', (req, res) => {

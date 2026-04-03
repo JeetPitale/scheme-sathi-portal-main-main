@@ -13,6 +13,9 @@ const userSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true }, // Hashed
     mobile: { type: String },
+    role: { type: String, default: 'USER', enum: ['USER', 'SUPER_ADMIN', 'CONTENT_ADMIN', 'REVIEW_ADMIN'] },
+    status: { type: String, default: 'active', enum: ['active', 'blocked'] },
+    language: { type: String, default: 'en' },
     profile: {
         age: { type: Number },
         gender: { type: String },
