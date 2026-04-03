@@ -27,10 +27,16 @@ app.use('/api/auth', authRoutes);
 
 // Basic Route
 app.get('/', (req, res) => {
-    res.send('API is running...');
+    res.send('Scheme Sathi API is running...');
 });
 
-// Start Server
-app.listen(PORT, () => {
-    console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
-});
+// For local development
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+  });
+}
+
+// Crucial for Vercel deployment
+export default app;
+
