@@ -1,0 +1,5 @@
+{
+  "appId": "com.convertapp.app",
+  "appName": "Convert App",
+  "webDir": "../dist"
+}

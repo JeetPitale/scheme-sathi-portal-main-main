@@ -27,6 +27,7 @@ const Services = () => {
   }, [searchParams]);
 
   const {
+    schemes,
     searchResults,
     totalCount,
     currentPage: storePage,
@@ -34,6 +35,7 @@ const Services = () => {
     loading,
     searchSchemes,
     filterSchemes,
+    loadSchemes,
     setPage
   } = useSchemeStore();
 
@@ -41,8 +43,9 @@ const Services = () => {
 
   // Load schemes on mount — initial page 1
   useEffect(() => {
+    loadSchemes();
     filterSchemes({}, 1);
-  }, [filterSchemes]);
+  }, [loadSchemes, filterSchemes]);
 
   // Debounce search query
   useEffect(() => {
@@ -67,15 +70,18 @@ const Services = () => {
   const totalPages = Math.ceil(totalCount / pageSize);
   const paginatedServices = searchResults;
 
-  // Compute counts per category for badges — we still need a bulk list or a specific API for counts
-  // For now, we'll keep using schemes list if it's loaded, but it might only be a page.
-  // TODO: Add a specific "getCategoryCounts" if Supabase has many records.
+  // Compute counts per category for badges
   const categoryCounts = useMemo(() => {
     const counts = {};
-    // This will only be accurate if schemes contains all, but with server-side pagination it won't.
-    // For MVP, we'll assume category counts are less critical or handle separately.
+    if (schemes && schemes.length > 0) {
+      schemes.forEach((s) => {
+        if (s.status === 'active' && s.category) {
+          counts[s.category] = (counts[s.category] || 0) + 1;
+        }
+      });
+    }
     return counts;
-  }, []);
+  }, [schemes]);
 
   // Reset page on any search query CHANGE (not page change)
   const handleSearchChange = (e) => {
