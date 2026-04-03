@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useParams, Navigate, Link } from 'react-router-dom';
+import { useParams, Navigate, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Layout from '@/components/Layout/Layout';
@@ -11,13 +11,15 @@ import { useSchemeStore } from '@/stores/schemeStore';
 
 const Category = () => {
   const { categoryId } = useParams();
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const { isAuthenticated } = useAuthStore();
-  const { schemes, filterSchemes, isLoading } = useSchemeStore();
+  const { searchResults, totalCount, filterSchemes, isLoading } = useSchemeStore();
 
   useEffect(() => {
     if (categoryId) {
-      filterSchemes({ category: categoryId });
+      // Just fetching the first page for this category view
+      filterSchemes({ category: categoryId }, 1);
     }
   }, [categoryId, filterSchemes]);
 
@@ -45,12 +47,10 @@ const Category = () => {
     <Layout>
       <div className="container py-6 md:py-10">
         <div className="mb-8">
-          <Link to="/dashboard">
-            <Button variant="ghost" size="sm" className="gap-2 mb-4">
-              <ArrowLeft className="h-4 w-4" />
-              Back to Dashboard
-            </Button>
-          </Link>
+          <Button variant="ghost" size="sm" className="gap-2 mb-4" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
           <div className="flex items-center gap-4">
             <span className="text-4xl">{category.icon}</span>
             <div>
@@ -58,7 +58,7 @@ const Category = () => {
                 {t(category.nameKey)}
               </h1>
               <p className="text-muted-foreground">
-                {schemes.length} schemes available
+                {totalCount} schemes available
               </p>
             </div>
           </div>
@@ -71,12 +71,22 @@ const Category = () => {
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {schemes.map((scheme) => (
+              {searchResults.map((scheme) => (
                 <ServiceCard key={scheme.id} service={scheme} />
               ))}
             </div>
+            
+            {totalCount > searchResults.length && (
+              <div className="text-center mt-12">
+                <Link to={`/services?category=${categoryId}`}>
+                  <Button variant="outline" size="lg">
+                    View All {totalCount} Schemes
+                  </Button>
+                </Link>
+              </div>
+            )}
 
-            {schemes.length === 0 && (
+            {searchResults.length === 0 && (
               <div className="text-center py-12">
                 <p className="text-muted-foreground">No schemes found in this category</p>
               </div>

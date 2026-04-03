@@ -20,10 +20,13 @@ const Services = () => {
   const [selectedState, setSelectedState] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
-  // Pre-fill search from URL query param
+  // Pre-fill search/category from URL query param
   useEffect(() => {
     const q = searchParams.get('q');
     if (q) setSearchQuery(q);
+    
+    const catUrl = searchParams.get('category');
+    if (catUrl) setSelectedCategory(catUrl);
   }, [searchParams]);
 
   const {

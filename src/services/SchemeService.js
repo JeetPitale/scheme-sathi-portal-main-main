@@ -106,9 +106,12 @@ const SchemeService = {
                 const snapshot = await getDocs(q);
                 return snapshot.docs.map(doc => {
                     const d = doc.data();
+                    let normalizedCategory = d.category || 'general';
+                    normalizedCategory = normalizedCategory.toLowerCase().replace(/ & /g, '-').replace(/\s+/g, '-');
                     return { 
                         id: doc.id, 
                         ...d,
+                        category: normalizedCategory,
                         name: d.name || d.scheme_name || "Untitled Scheme",
                         status: d.status || 'active',
                         isScheme: true,

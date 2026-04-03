@@ -67,6 +67,14 @@ const ServiceDetail = () => {
     }
   };
 
+  const handleFileSelect = (e, docName) => {
+    const file = e.target.files[0];
+    if (file) {
+      handleDocUpload(docName);
+    }
+    e.target.value = null;
+  };
+
   const handleDigiLockerFetch = async (docName) => {
     try {
       const result = await fetchDocumentFromDigiLocker(docName);
@@ -292,53 +300,55 @@ const ServiceDetail = () => {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">
-              {t('fullName')} *
-            </label>
-            <Input name="fullName" value={formData.fullName} onChange={handleInputChange} placeholder="Enter full name as per Aadhaar" />
-          </div>
+        <form onSubmit={(e) => { e.preventDefault(); setStep('documents'); }}>
+            <CardContent className="space-y-4">
+            <div>
+                <label className="text-sm font-medium text-foreground mb-1.5 block">
+                {t('fullName')} *
+                </label>
+                <Input required name="fullName" value={formData.fullName} onChange={handleInputChange} placeholder="Enter full name as per Aadhaar" />
+            </div>
 
-          <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">
-              {t('mobileNumber')} *
-            </label>
-            <Input name="mobile" value={formData.mobile} onChange={handleInputChange} placeholder="10-digit mobile number" readOnly />
-          </div>
+            <div>
+                <label className="text-sm font-medium text-foreground mb-1.5 block">
+                {t('mobileNumber')} *
+                </label>
+                <Input required name="mobile" value={formData.mobile} onChange={handleInputChange} placeholder="10-digit mobile number" readOnly />
+            </div>
 
-          <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">
-              {t('email')}
-            </label>
-            <Input name="email" type="email" value={formData.email} onChange={handleInputChange} placeholder="email@example.com" />
-          </div>
+            <div>
+                <label className="text-sm font-medium text-foreground mb-1.5 block">
+                {t('email')}
+                </label>
+                <Input name="email" type="email" value={formData.email} onChange={handleInputChange} placeholder="email@example.com" />
+            </div>
 
-          <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">
-              {t('aadhaarNumber')} *
-            </label>
-            <Input name="aadhaar" value={formData.aadhaar} onChange={handleInputChange} placeholder="12-digit Aadhaar number" maxLength={12} />
-          </div>
+            <div>
+                <label className="text-sm font-medium text-foreground mb-1.5 block">
+                {t('aadhaarNumber')} *
+                </label>
+                <Input required name="aadhaar" value={formData.aadhaar} onChange={handleInputChange} placeholder="12-digit Aadhaar number" maxLength={12} minLength={12} />
+            </div>
 
-          <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">
-              {t('address')} *
-            </label>
-            <Input name="address" value={formData.address} onChange={handleInputChange} placeholder="Full address" />
-          </div>
+            <div>
+                <label className="text-sm font-medium text-foreground mb-1.5 block">
+                {t('address')} *
+                </label>
+                <Input required name="address" value={formData.address} onChange={handleInputChange} placeholder="Full address" />
+            </div>
 
-          <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">
-              {t('additionalInfo')}
-            </label>
-            <Input name="additionalInfo" value={formData.additionalInfo} onChange={handleInputChange} placeholder="Any other relevant information" />
-          </div>
+            <div>
+                <label className="text-sm font-medium text-foreground mb-1.5 block">
+                {t('additionalInfo')}
+                </label>
+                <Input name="additionalInfo" value={formData.additionalInfo} onChange={handleInputChange} placeholder="Any other relevant information" />
+            </div>
 
-          <Button onClick={() => setStep('documents')} className="w-full">
-            {t('next')}: {t('uploadDocuments')}
-          </Button>
-        </CardContent>
+            <Button type="submit" className="w-full">
+                {t('next')}: {t('uploadDocuments')}
+            </Button>
+            </CardContent>
+        </form>
       </Card>)}
 
       {step === 'documents' && (<Card>
@@ -371,10 +381,16 @@ const ServiceDetail = () => {
               {verifiedDocs.includes(doc) && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full border border-green-200">{t('verifiedViaDigilocker')}</span>}
             </div>) : (
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => handleDigiLockerFetch(doc)} className="gap-2 border-blue-200 text-blue-700 hover:bg-blue-50">
+                <Button type="button" variant="outline" size="sm" onClick={() => handleDigiLockerFetch(doc)} className="gap-2 border-blue-200 text-blue-700 hover:bg-blue-50">
                   <span className="font-bold">DigiLocker</span>
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => handleDocUpload(doc)} className="gap-2">
+                <input 
+                  type="file" 
+                  id={`file-upload-${doc.replace(/\s+/g, '-')}`} 
+                  className="hidden" 
+                  onChange={(e) => handleFileSelect(e, doc)} 
+                />
+                <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById(`file-upload-${doc.replace(/\s+/g, '-')}`).click()} className="gap-2">
                   <Upload className="h-4 w-4" />
                   {t('upload')}
                 </Button>
