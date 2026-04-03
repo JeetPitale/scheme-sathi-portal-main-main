@@ -7,10 +7,7 @@
 // Local fallback memory store until backend implements API
 let _logs = [];
 
-const getApiUrl = () => {
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:5001';
-    return `${baseUrl}/api`;
-};
+const getApiUrl = () => import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
 /** Action type constants */
 export const AUDIT_ACTIONS = {

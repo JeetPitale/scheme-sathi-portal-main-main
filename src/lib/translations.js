@@ -184,6 +184,7 @@ export const translations = {
         privacy: 'Privacy',
         terms: 'Terms',
         disclaimer: 'Disclaimer: This is a demo portal. Actual government integrations are not live.',
+        noDocumentsRequired: 'No documents required',
     },
     hi: {
         appName: 'स्कीम सारथी',
@@ -356,6 +357,7 @@ export const translations = {
         privacy: 'गोपनीयता',
         terms: 'शर्तें',
         disclaimer: 'अस्वीकरण: यह एक डेमो पोर्टल है। वास्तविक सरकारी एकीकरण लाइव नहीं हैं।',
+        noDocumentsRequired: 'किसी दस्तावेज़ की आवश्यकता नहीं है',
     },
     gu: {
         appName: 'સ્કીમ સારથી',
@@ -428,6 +430,7 @@ export const translations = {
         privacy: 'ગોપનીયતા',
         terms: 'શરતો',
         disclaimer: 'અસ્વીકરણ: આ એક ડેમો પોર્ટલ છે. વાસ્તવિક સરકારી એકીકરણ લાઇવ નથી.',
+        noDocumentsRequired: 'કોઈ દસ્તાવેજોની જરૂર નથી',
     },
     ta: {
         appName: 'ஸ்கீம் சாரதி',

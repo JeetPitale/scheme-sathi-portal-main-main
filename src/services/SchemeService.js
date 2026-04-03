@@ -3,11 +3,8 @@
  * Backed by Node.js/MongoDB REST API
  */
 
-const getApiUrl = () => {
-    // Check both VITE_API_BASE_URL and VITE_API_URL just in case
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:5001';
-    return `${baseUrl}/api`;
-};
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const getApiUrl = () => API_URL;
 
 let _cache = null;
 let _cacheTimestamp = 0;
@@ -41,6 +38,9 @@ const SchemeService = {
             const normalizedData = data.map(d => {
                 let normalizedCategory = d.category || 'general';
                 normalizedCategory = normalizedCategory.toLowerCase().replace(/ & /g, '-').replace(/\s+/g, '-');
+                
+                // Map backend 'rules' to frontend 'eligibility'
+                // and 'documents' to 'documents_required'
                 return { 
                     ...d,
                     id: d._id || d.id,
@@ -49,7 +49,12 @@ const SchemeService = {
                     status: d.status || 'active',
                     isScheme: true,
                     is_scheme: true,
-                    governmentLevel: d.governmentLevel || d.government_level || 'Central'
+                    governmentLevel: d.governmentLevel || d.government_level || (d.state === 'central' ? 'Central' : 'State'),
+                    
+                    // Unified field mappings
+                    eligibility: d.eligibility || d.rules || {},
+                    documents_required: d.documents_required || d.documents || [],
+                    benefits: d.benefits || (d.benefitAmount ? `Financial assistance of ₹${d.benefitAmount}` : null)
                 };
             });
 
@@ -85,6 +90,8 @@ const SchemeService = {
             const all = await this.getAll();
             return all.find(s => 
                 s.slug === slug || 
+                s.id === slug ||
+                s._id === slug ||
                 (s.name && s.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') === slug) ||
                 (s.scheme_name && s.scheme_name.toLowerCase().replace(/[^a-z0-9]+/g, '-') === slug)
             ) || null;

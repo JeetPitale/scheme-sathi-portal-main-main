@@ -3,10 +3,7 @@
  * Backed by Node.js/MongoDB REST API
  */
 
-const getApiUrl = () => {
-    const baseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:5001';
-    return `${baseUrl}/api`;
-};
+const getApiUrl = () => import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
 export const NOTIF_TYPES = {
     APPROVAL: 'approval',
