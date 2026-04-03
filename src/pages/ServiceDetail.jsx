@@ -151,14 +151,16 @@ const ServiceDetail = () => {
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Benefits Section */}
-            {service.benefits ? (
+            {service.benefits && (service.benefits.financial_assistance || service.benefits.non_financial_support) ? (
               <div className="space-y-4">
-                <div>
-                  <h3 className="font-semibold text-foreground mb-2 flex items-center gap-2">
-                    <IndianRupee className="h-4 w-4 text-primary" /> {t('financialAssistance')}
-                  </h3>
-                  <p className="text-muted-foreground">{service.benefits.financial_assistance}</p>
-                </div>
+                {service.benefits.financial_assistance && (
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-2 flex items-center gap-2">
+                      <IndianRupee className="h-4 w-4 text-primary" /> {t('financialAssistance')}
+                    </h3>
+                    <p className="text-muted-foreground">{service.benefits.financial_assistance}</p>
+                  </div>
+                )}
                 {service.benefits.non_financial_support && (
                   <div>
                     <h3 className="font-semibold text-foreground mb-2 flex items-center gap-2">

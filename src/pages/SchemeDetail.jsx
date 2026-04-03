@@ -133,10 +133,10 @@ const SchemeDetail = () => {
     };
 
     // Safe parsing for benefits and documents_required if they come as JSON strings or objects
-    const benefits = typeof scheme.benefits === 'string' ? JSON.parse(scheme.benefits) : scheme.benefits;
+    const benefits = (typeof scheme.benefits === 'string' && scheme.benefits.startsWith('{')) ? JSON.parse(scheme.benefits) : (scheme.benefits || {});
     const documents = Array.isArray(scheme.documents_required)
         ? scheme.documents_required
-        : (typeof scheme.documents_required === 'string' ? JSON.parse(scheme.documents_required) || [] : []);
+        : (typeof scheme.documents_required === 'string' && scheme.documents_required.startsWith('[')) ? JSON.parse(scheme.documents_required) || [] : (scheme.documents_required || []);
 
     return (<Layout>
         <div className="container py-6 md:py-10 max-w-3xl">
@@ -171,7 +171,7 @@ const SchemeDetail = () => {
                     </CardHeader>
                     <CardContent className="space-y-6">
                         {/* Benefits Section */}
-                        {benefits ? (
+                        {benefits && (benefits.financial_assistance || benefits.non_financial_support) ? (
                             <div className="space-y-4">
                                 {benefits.financial_assistance && (
                                     <div>
