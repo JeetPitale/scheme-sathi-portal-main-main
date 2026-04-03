@@ -25,14 +25,13 @@ router.post('/register', async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
-        // Map roles for specific deterministic admin emails securely like Firebase used to
+        // Map admin roles based on specific emails
         let role = 'USER';
         if (email === 'admin@schemesarthi.gov.in') role = 'SUPER_ADMIN';
         else if (email === 'content@schemesarthi.gov.in') role = 'CONTENT_ADMIN';
         else if (email === 'reviewer@schemesarthi.gov.in') role = 'REVIEW_ADMIN';
 
         const user = await User.create({
-            firebaseUid: `mongo_${Date.now()}`, // fallback to prevent schema clashes
             email,
             password: hashedPassword,
             fullName,
@@ -71,9 +70,9 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ success: false, error: 'Invalid email or password' });
         }
         
-        // We might be migrating from Firebase where password is NOT in MongoDB
+        // Check for password
         if (!user.password) {
-            return res.status(401).json({ success: false, error: 'Account migrated silently. Please reset your password or sign in with Firebase temporarily if bridging is active.' });
+            return res.status(401).json({ success: false, error: 'Account setup incomplete.' });
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
