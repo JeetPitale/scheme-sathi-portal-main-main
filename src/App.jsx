@@ -88,7 +88,7 @@ const App = () => {
     initTheme();
     loadSchemes();
     
-    // Initialize Firebase onAuthStateChanged listener
+    // Initialize auth state listener from our local store
     const unsubscribe = initAuthListener();
 
     return () => {

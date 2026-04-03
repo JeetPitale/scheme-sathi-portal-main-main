@@ -172,7 +172,7 @@ export const useAuthStore = create()(persist((set, get) => ({
 }));
 
 // ════════════════════════════════════════
-// Application Store — Firebase backend
+// Application Store — MongoDB backend
 // ════════════════════════════════════════
 export const useApplicationStore = create((set, get) => ({
     applications: [],
@@ -248,7 +248,7 @@ export const useApplicationStore = create((set, get) => ({
 }));
 
 // ════════════════════════════════════════
-// Notification Store — Firebase-backed
+// Notification Store — MongoDB backend
 // ════════════════════════════════════════
 export const useNotificationStore = create((set, get) => ({
     notifications: [],
@@ -323,7 +323,7 @@ export const useNotificationStore = create((set, get) => ({
 }));
 
 // ════════════════════════════════════════
-// Activity Log Store — Firebase-backed
+// Activity Log Store — MongoDB backend
 // ════════════════════════════════════════
 export const useActivityLogStore = create((set, get) => ({
     logs: [],
