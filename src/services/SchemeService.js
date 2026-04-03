@@ -8,7 +8,7 @@ const getApiUrl = () => API_URL;
 
 let _cache = null;
 let _cacheTimestamp = 0;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 30 * 1000; // 30 seconds (down from 5 mins for better live updates)
 
 function isCacheValid() {
     return _cache && (Date.now() - _cacheTimestamp) < CACHE_TTL;
