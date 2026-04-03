@@ -1,12 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { auth, db } from '@/lib/firebase';
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updatePassword } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
 import NotificationService from '@/services/NotificationService';
 import AuditService, { AUDIT_ACTIONS } from '@/services/AuditService';
 import { isAdminRole } from '@/lib/rbac';
-import { createApplication, getUserApplications, updateApplicationStatus as updateAppStatusFirestore } from '@/lib/applicationService';
+import { createApplication, getUserApplications, getAllApplications, updateApplicationStatus as updateAppStatusFirestore } from '@/lib/applicationService';
 
 // ════════════════════════════════════════
 // Theme Store (unchanged)

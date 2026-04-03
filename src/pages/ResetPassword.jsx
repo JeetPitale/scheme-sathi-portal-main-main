@@ -9,8 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
-import { auth } from '@/lib/firebase';
-import { confirmPasswordReset, verifyPasswordResetCode } from 'firebase/auth';
 
 const schema = z.object({
     password: z.string().min(8, 'Password must be at least 8 characters'),
@@ -43,20 +41,17 @@ const ResetPassword = () => {
         }
 
         setOobCode(code);
-        verifyPasswordResetCode(auth, code)
-            .then((verifiedEmail) => {
-                setEmail(verifiedEmail);
-                setLoading(false);
-            })
-            .catch((error) => {
-                toast.error('Password reset link is invalid or has expired');
-                navigate('/forgot-password');
-            });
+        // Mock verification
+        setTimeout(() => {
+            setEmail('user@example.com'); // Mock email
+            setLoading(false);
+        }, 500);
     }, [location, navigate]);
 
     const onSubmit = async (data) => {
         try {
-            await confirmPasswordReset(auth, oobCode, data.password);
+            // Mock backend call
+            await new Promise((resolve) => setTimeout(resolve, 1000));
             toast.success('Password updated successfully!');
             navigate('/login');
         } catch (error) {

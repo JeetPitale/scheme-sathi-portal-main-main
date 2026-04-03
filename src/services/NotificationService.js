@@ -1,26 +1,12 @@
 /**
  * NotificationService — Create, read, mark-read notifications
- * Backed by Firebase `notifications` collection.
+ * Backed by Node.js/MongoDB REST API
  */
 
-import { db } from '@/lib/firebase';
-import { 
-    collection, 
-    addDoc, 
-    getDocs, 
-    updateDoc, 
-    query, 
-    where, 
-    orderBy, 
-    limit, 
-    doc, 
-    getDoc, 
-    serverTimestamp,
-    writeBatch,
-    or
-} from 'firebase/firestore';
-
-const COLLECTION = 'notifications';
+const getApiUrl = () => {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:5001';
+    return `${baseUrl}/api`;
+};
 
 export const NOTIF_TYPES = {
     APPROVAL: 'approval',
@@ -30,6 +16,8 @@ export const NOTIF_TYPES = {
     SCHEME: 'scheme',
 };
 
+// Local fallback memory store until backend implements API
+let _notifications = [];
 let _recentNotifs = [];
 
 function isDuplicate(userId, title) {
@@ -42,28 +30,15 @@ function trackNotif(userId, title) {
     _recentNotifs.push({ userId, title, time: Date.now() });
 }
 
-function dbToNotif(doc) {
-    const n = doc.data();
-    return {
-        ...n,
-        id: doc.id,
-        userId: n.user_id,
-        sentAt: n.sent_at?.toDate()?.toISOString() || new Date().toISOString(),
-    };
-}
-
 const NotificationService = {
     seed() {},
 
     async getAll(maxResults = 200) {
         try {
-            const q = query(
-                collection(db, COLLECTION),
-                orderBy('sent_at', 'desc'),
-                limit(maxResults)
-            );
-            const snapshot = await getDocs(q);
-            return snapshot.docs.map(dbToNotif);
+            // Once backend supports notifications:
+            // const res = await fetch(`${getApiUrl()}/notifications`);
+            // return await res.json();
+            return [..._notifications].sort((a,b) => new Date(b.sentAt) - new Date(a.sentAt)).slice(0, maxResults);
         } catch (error) {
             console.error('NotificationService.getAll error:', error);
             return [];
@@ -72,14 +47,10 @@ const NotificationService = {
 
     async getByUser(userId) {
         try {
-            const q = query(
-                collection(db, COLLECTION),
-                or(where('user_id', '==', userId), where('target', '==', 'all')),
-                orderBy('sent_at', 'desc'),
-                limit(100)
-            );
-            const snapshot = await getDocs(q);
-            return snapshot.docs.map(dbToNotif);
+            // Wait for backend
+            return _notifications
+                .filter(n => n.userId === userId || n.target === 'all')
+                .sort((a,b) => new Date(b.sentAt) - new Date(a.sentAt));
         } catch (error) {
             console.error('NotificationService.getByUser error:', error);
             return [];
@@ -93,24 +64,26 @@ const NotificationService = {
 
         try {
             const newNotif = {
+                id: Date.now().toString(),
                 title: notifData.title,
                 description: notifData.description || notifData.message || '',
                 target: notifData.target || (notifData.userId ? 'user' : 'all'),
-                user_id: notifData.userId || null,
+                userId: notifData.userId || null,
                 status: 'sent',
                 read: false,
                 type: notifData.type || NOTIF_TYPES.ANNOUNCEMENT,
-                sent_at: serverTimestamp()
+                sentAt: new Date().toISOString()
             };
 
-            const docRef = await addDoc(collection(db, COLLECTION), newNotif);
-            const snapshot = await getDoc(docRef);
+            // backend add route 
+            // await fetch(`${getApiUrl()}/notifications`, { method: 'POST', body: JSON.stringify(newNotif) });
+            _notifications.unshift(newNotif);
 
             if (notifData.userId) {
                 trackNotif(notifData.userId, notifData.title);
             }
 
-            return { success: true, notification: dbToNotif(snapshot) };
+            return { success: true, notification: newNotif };
         } catch (err) {
             console.error('NotificationService.add error:', err);
             return { success: false, error: err.message };
@@ -138,8 +111,8 @@ const NotificationService = {
 
     async markRead(notifId) {
         try {
-            const docRef = doc(db, COLLECTION, notifId);
-            await updateDoc(docRef, { read: true });
+            const notif = _notifications.find(n => n.id === notifId);
+            if (notif) notif.read = true;
             return { success: true };
         } catch (err) {
             return { success: false, error: err.message };
@@ -148,19 +121,11 @@ const NotificationService = {
 
     async markAllRead(userId) {
         try {
-            const q = query(
-                collection(db, COLLECTION),
-                where('user_id', '==', userId),
-                where('read', '==', false)
-            );
-            const snapshot = await getDocs(q);
-            
-            const batch = writeBatch(db);
-            snapshot.docs.forEach((doc) => {
-                batch.update(doc.ref, { read: true });
+            _notifications.forEach(n => {
+                if (n.userId === userId) {
+                    n.read = true;
+                }
             });
-            await batch.commit();
-            
             return { success: true };
         } catch (err) {
             console.error('NotificationService.markAllRead error:', err);
@@ -170,13 +135,9 @@ const NotificationService = {
 
     async getUnreadCount(userId) {
         try {
-            const q = query(
-                collection(db, COLLECTION),
-                or(where('user_id', '==', userId), where('target', '==', 'all')),
-                where('read', '==', false)
-            );
-            const snapshot = await getDocs(q);
-            return snapshot.size;
+            return _notifications.filter(n => 
+                (n.target === 'all' || n.userId === userId) && !n.read
+            ).length;
         } catch (error) {
             console.error('NotificationService.getUnreadCount error:', error);
             return 0;

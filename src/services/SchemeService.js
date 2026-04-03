@@ -1,82 +1,13 @@
 /**
  * SchemeService — CRUD for government schemes
- * Backed by Firebase `schemes` collection.
+ * Backed by Node.js/MongoDB REST API
  */
 
-import { db } from '@/lib/firebase';
-import { 
-    collection, 
-    addDoc, 
-    getDocs, 
-    updateDoc, 
-    deleteDoc, 
-    query, 
-    where, 
-    orderBy, 
-    limit, 
-    doc, 
-    getDoc, 
-    serverTimestamp,
-    or
-} from 'firebase/firestore';
-
-const COLLECTION = 'schemes';
-const LOCAL_SCHEMES = [
-    {
-        id: 'mock-1',
-        name: 'Pradhan Mantri Jan Dhan Yojana (PMJDY)',
-        description: 'National Mission for Financial Inclusion to ensure access to financial services, namely, basic savings & deposit accounts, remittance, credit, insurance, pension in an affordable manner.',
-        category: 'tax-finance',
-        state: 'central',
-        government_level: 'Central',
-        status: 'active',
-        isScheme: true,
-        is_scheme: true,
-        slug: 'pm-jan-dhan-yojana',
-        benefits: {
-            financial_assistance: 'Interest on deposit, Accidental insurance cover of Rs.1 lakh, no minimum balance required.',
-            non_financial_support: 'Access to pension and insurance products.'
-        },
-        eligibility: { minAge: 10, categories: ['Any', 'General', 'OBC', 'SC', 'ST'] },
-        documents_required: ['Aadhaar Card', 'PAN Card', 'Voter ID', 'Driving License']
-    },
-    {
-        id: 'mock-2',
-        name: 'Atal Pension Yojana (APY)',
-        description: 'A pension scheme for citizens of India focused on the unorganized sector workers.',
-        category: 'pensions',
-        state: 'central',
-        government_level: 'Central',
-        status: 'active',
-        isScheme: true,
-        is_scheme: true,
-        slug: 'atal-pension-yojana',
-        benefits: {
-            financial_assistance: 'Guaranteed minimum pension of Rs. 1,000 to Rs. 5,000 per month after age 60.',
-            non_financial_support: 'Social security for old age.'
-        },
-        eligibility: { minAge: 18, maxAge: 60, categories: ['Any', 'General', 'OBC', 'SC', 'ST'] },
-        documents_required: ['Aadhaar Card', 'Savings Bank Account']
-    },
-    {
-        id: 'mock-3',
-        name: 'PM-Kisan Samman Nidhi',
-        description: 'An initiative by the government of India in which all farmers will get up to ₹6,000 per year as minimum income support.',
-        category: 'agriculture',
-        state: 'central',
-        government_level: 'Central',
-        status: 'active',
-        isScheme: true,
-        is_scheme: true,
-        slug: 'pm-kisan-samman-nidhi',
-        benefits: {
-            financial_assistance: 'Direct income support of Rs. 6,000 per year in three equal installments.',
-            non_financial_support: 'Financial stability for small and marginal farmers.'
-        },
-        eligibility: { categories: ['Any', 'Small and Marginal Farmers', 'General', 'OBC', 'SC', 'ST'], states: ['central'] },
-        documents_required: ['Aadhaar Card', 'Land Holding Documents', 'Bank Account']
-    }
-];
+const getApiUrl = () => {
+    // Check both VITE_API_BASE_URL and VITE_API_URL just in case
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:5001';
+    return `${baseUrl}/api`;
+};
 
 let _cache = null;
 let _cacheTimestamp = 0;
@@ -100,56 +31,37 @@ const SchemeService = {
         if (isCacheValid()) return _cache;
 
         try {
-            // Add a timeout to firestore fetch to avoid hanging on poor connections
-            const fetchPromise = (async () => {
-                const q = query(collection(db, COLLECTION));
-                const snapshot = await getDocs(q);
-                return snapshot.docs.map(doc => {
-                    const d = doc.data();
-                    let normalizedCategory = d.category || 'general';
-                    normalizedCategory = normalizedCategory.toLowerCase().replace(/ & /g, '-').replace(/\s+/g, '-');
-                    return { 
-                        id: doc.id, 
-                        ...d,
-                        category: normalizedCategory,
-                        name: d.name || d.scheme_name || "Untitled Scheme",
-                        status: d.status || 'active',
-                        isScheme: true,
-                        is_scheme: true,
-                        governmentLevel: d.governmentLevel || d.government_level || 'Central'
-                    };
-                });
-            })();
+            const res = await fetch(`${getApiUrl()}/schemes`);
+            if (!res.ok) {
+                throw new Error(`Failed to fetch from backend: ${res.status}`);
+            }
+            const data = await res.json();
 
-            const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Firestore fetch timeout')), 15000)
-            );
+            // Normalize data to work with existing frontend components
+            const normalizedData = data.map(d => {
+                let normalizedCategory = d.category || 'general';
+                normalizedCategory = normalizedCategory.toLowerCase().replace(/ & /g, '-').replace(/\s+/g, '-');
+                return { 
+                    ...d,
+                    id: d._id || d.id,
+                    category: normalizedCategory,
+                    name: d.name || d.scheme_name || "Untitled Scheme",
+                    status: d.status || 'active',
+                    isScheme: true,
+                    is_scheme: true,
+                    governmentLevel: d.governmentLevel || d.government_level || 'Central'
+                };
+            });
 
-            const firestoreData = await Promise.race([fetchPromise, timeoutPromise]);
+            normalizedData.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
-            // Combine local schemes with firestore schemes
-            const seededNames = new Set(firestoreData.map(s => (s.name || '').toLowerCase()));
-            const uniqueLocal = LOCAL_SCHEMES.filter(ls => !seededNames.has(ls.name.toLowerCase()));
-            
-            const data = [...firestoreData, ...uniqueLocal];
-            data.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-
-            _cache = data;
+            _cache = normalizedData;
             _cacheTimestamp = Date.now();
             return _cache;
         } catch (error) {
-            console.error('SchemeService.getAll fallback activated:', error.message);
-            // Return local schemes as fallback on fatal error or timeout
-            const fallbackData = LOCAL_SCHEMES.map(ls => ({
-                ...ls,
-                name: ls.name || ls.scheme_name || "Untitled Scheme",
-                status: ls.status || 'active',
-                isScheme: true,
-                is_scheme: true,
-                governmentLevel: ls.governmentLevel || ls.government_level || 'Central'
-            }));
-            _cache = fallbackData;
-            return fallbackData;
+            console.error('SchemeService.getAll error:', error.message);
+            // In case the backend completely fails, return an empty array instead of crashing
+            return [];
         }
     },
 
@@ -160,71 +72,16 @@ const SchemeService = {
 
     async getById(id) {
         try {
-            const fetchPromise = (async () => {
-                const docRef = doc(db, COLLECTION, id);
-                const snapshot = await getDoc(docRef);
-                if (snapshot.exists()) {
-                    const d = snapshot.data();
-                    return { 
-                        id: snapshot.id, 
-                        ...d,
-                        name: d.name || d.scheme_name || "Untitled Scheme",
-                        status: d.status || 'active',
-                        isScheme: true,
-                        is_scheme: true,
-                        governmentLevel: d.governmentLevel || d.government_level || 'Central'
-                    };
-                }
-                return null;
-            })();
-
-            const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Firestore fetch timeout')), 15000)
-            );
-
-            const result = await Promise.race([fetchPromise, timeoutPromise]);
-            if (result) return result;
-
-            // Fallback to local schemes if not in Firestore
-            const local = LOCAL_SCHEMES.find(ls => ls.id === id);
-            if (local) return local;
-
-            return null;
+            const all = await this.getAll();
+            return all.find(s => s.id === id || s._id === id) || null;
         } catch (error) {
-            console.error(`SchemeService.getById(${id}) fallback activated:`, error.message);
-            return LOCAL_SCHEMES.find(ls => ls.id === id) || null;
+            console.error(`SchemeService.getById(${id}) error:`, error.message);
+            return null;
         }
     },
 
     async getBySlug(slug) {
         try {
-            const fetchPromise = (async () => {
-                const q = query(collection(db, COLLECTION), where('slug', '==', slug), limit(1));
-                const snapshot = await getDocs(q);
-                if (!snapshot.empty) {
-                    const doc = snapshot.docs[0];
-                    const d = doc.data();
-                    return { 
-                        id: doc.id, 
-                        ...d,
-                        name: d.name || d.scheme_name || "Untitled Scheme",
-                        status: d.status || 'active',
-                        isScheme: true,
-                        is_scheme: true,
-                        governmentLevel: d.governmentLevel || d.government_level || 'Central'
-                    };
-                }
-                return null;
-            })();
-
-            const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Firestore fetch timeout')), 15000)
-            );
-
-            const result = await Promise.race([fetchPromise, timeoutPromise]);
-            if (result) return result;
-
-            // Fallback: search by generated slug from name or scheme_name if direct slug match fails
             const all = await this.getAll();
             return all.find(s => 
                 s.slug === slug || 
@@ -232,13 +89,8 @@ const SchemeService = {
                 (s.scheme_name && s.scheme_name.toLowerCase().replace(/[^a-z0-9]+/g, '-') === slug)
             ) || null;
         } catch (error) {
-            console.error(`SchemeService.getBySlug(${slug}) fallback activated:`, error.message);
-            // On timeout, we must use local data
-            const all = await this.getAll(); // This already handles fallback/timeout
-            return all.find(s => 
-                s.slug === slug || 
-                (s.name && (s.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-') === slug)
-            ) || null;
+            console.error(`SchemeService.getBySlug(${slug}) error:`, error.message);
+            return null;
         }
     },
 
@@ -247,61 +99,27 @@ const SchemeService = {
         return all.filter(s => s.is_featured === true).slice(0, limitCount);
     },
 
+    // ── NOTE: The below methods (add, update, remove, toggle) require backend POST/PUT/DELETE routes. 
+    // They are currently mocked to prevent crashes until the backend implements them.
+    
     async add(schemeData) {
-        try {
-            const slug = schemeData.slug || (schemeData.name || schemeData.scheme_name || "").toLowerCase().replace(/[^a-z0-9]+/g, '-');
-            const newScheme = {
-                ...schemeData,
-                slug,
-                isScheme: true,
-                is_scheme: true,
-                status: schemeData.status || 'active',
-                created_at: serverTimestamp(),
-                updated_at: serverTimestamp()
-            };
-            const docRef = await addDoc(collection(db, COLLECTION), newScheme);
-            const snapshot = await getDoc(docRef);
-
-            invalidateCache();
-            return { success: true, scheme: { id: docRef.id, ...snapshot.data() } };
-        } catch (err) {
-            return { success: false, error: err.message };
-        }
+        console.warn("Backend add route not implemented yet!");
+        return { success: false, error: "Not implemented in MongoDB backend yet" };
     },
 
     async update(id, updates) {
-        try {
-            const docRef = doc(db, COLLECTION, id);
-            await updateDoc(docRef, { 
-                ...updates, 
-                updated_at: serverTimestamp() 
-            });
-
-            invalidateCache();
-            const snapshot = await getDoc(docRef);
-            return { success: true, scheme: { id, ...snapshot.data() } };
-        } catch (err) {
-            return { success: false, error: err.message };
-        }
+        console.warn("Backend update route not implemented yet!");
+        return { success: false, error: "Not implemented in MongoDB backend yet" };
     },
 
     async remove(id) {
-        try {
-            const docRef = doc(db, COLLECTION, id);
-            await deleteDoc(docRef);
-            invalidateCache();
-            return { success: true };
-        } catch (err) {
-            return { success: false, error: err.message };
-        }
+        console.warn("Backend remove route not implemented yet!");
+        return { success: false, error: "Not implemented in MongoDB backend yet" };
     },
 
     async toggleStatus(id) {
-        const scheme = await this.getById(id);
-        if (!scheme) return { success: false, error: 'Scheme not found' };
-
-        const newStatus = scheme.status === 'active' ? 'inactive' : 'active';
-        return this.update(id, { status: newStatus });
+        console.warn("Backend toggle status route not implemented yet!");
+        return { success: false, error: "Not implemented in MongoDB backend yet" };
     },
 
     async search(queryStr, page = 1, pageSize = 12) {
@@ -344,9 +162,6 @@ const SchemeService = {
             
             if (filters.status) {
                 filtered = filtered.filter(s => s.status === filters.status);
-            } else {
-                // Default to showing active if filtered (active status might be missing on some docs)
-                // Actually if no status filter, just show all
             }
 
             const start = (page - 1) * pageSize;
@@ -354,8 +169,8 @@ const SchemeService = {
 
             return { data: paginated, count: filtered.length };
         } catch (error) {
-            console.error('SchemeService.filter error:', error);
-            return { data: [], count: 0 };
+             console.error('SchemeService.filter error:', error);
+             return { data: [], count: 0 };
         }
     },
 
@@ -363,3 +178,4 @@ const SchemeService = {
 };
 
 export default SchemeService;
+

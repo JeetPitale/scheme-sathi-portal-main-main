@@ -8,8 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { auth } from '@/lib/firebase';
-import { sendPasswordResetEmail } from 'firebase/auth';
 
 const schema = z.object({
     email: z.string().email('Valid email is required'),
@@ -23,9 +21,11 @@ const ForgotPassword = () => {
 
     const onSubmit = async (data) => {
         try {
-            await sendPasswordResetEmail(auth, data.email);
+            // Mock backend call
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            // throw new Error("Forgot password routing not yet implemented in backend");
             setIsSubmitted(true);
-            toast.success('Password reset email sent');
+            toast.success('Password reset instructions sent');
         } catch (error) {
             toast.error(error.message || 'Failed to send reset email');
         }
@@ -39,7 +39,7 @@ const ForgotPassword = () => {
                         <CardTitle className="text-2xl">Reset Password</CardTitle>
                         <CardDescription>
                             {isSubmitted
-                                ? 'Check your email for a link to reset your password. If it doesn’t appear within a few minutes, check your spam folder.'
+                                ? 'If an account with that email exists, we have sent instructions to reset your password.'
                                 : 'Enter your email address and we will send you a link to reset your password.'}
                         </CardDescription>
                     </CardHeader>

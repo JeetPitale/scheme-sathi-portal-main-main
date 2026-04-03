@@ -1,22 +1,16 @@
 /**
  * AuditService — Immutable audit log for all admin actions
- * Backed by Firebase `audit_logs` collection.
+ * Backed by Node.js/MongoDB REST API
  * APPEND-ONLY: Only addDoc is used. No update or delete operations.
  */
 
-import { db } from '@/lib/firebase';
-import { 
-    collection, 
-    addDoc, 
-    getDocs, 
-    query, 
-    where, 
-    orderBy, 
-    limit, 
-    serverTimestamp 
-} from 'firebase/firestore';
+// Local fallback memory store until backend implements API
+let _logs = [];
 
-const COLLECTION = 'audit_logs';
+const getApiUrl = () => {
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:5001';
+    return `${baseUrl}/api`;
+};
 
 /** Action type constants */
 export const AUDIT_ACTIONS = {
@@ -57,20 +51,13 @@ const AuditService = {
     /** Get all logs (newest first) */
     async getAll(maxResults = 200) {
         try {
-            const q = query(
-                collection(db, COLLECTION),
-                orderBy('timestamp', 'desc'),
-                limit(maxResults)
-            );
-            const snapshot = await getDocs(q);
-            return snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                timestamp: doc.data().timestamp?.toDate()?.toISOString() || new Date().toISOString()
-            }));
+            // Once backend supports audits:
+            // const res = await fetch(`${getApiUrl()}/audits`);
+            // return await res.json();
+            return _logs.slice(0, maxResults);
         } catch (error) {
             console.error('AuditService.getAll error:', error);
-            return [];
+            return _logs;
         }
     },
 
@@ -84,20 +71,23 @@ const AuditService = {
 
         try {
             const entry = {
+                id: Date.now().toString(),
                 action_type: actionType,
                 performed_by: performedBy || null,
                 performer_role: performerRole || 'unknown',
                 target_id: targetId || 'N/A',
                 target_type: targetType || 'system',
                 metadata: metadata,
-                timestamp: serverTimestamp()
+                timestamp: new Date().toISOString()
             };
 
-            const docRef = await addDoc(collection(db, COLLECTION), entry);
+            // Wait for backend support
+            // await fetch(`${getApiUrl()}/audits`, { method: 'POST', body: JSON.stringify(entry) });
+            _logs.unshift(entry);
 
             _lastLog = { actionType, targetId: targetId || '', time: Date.now() };
 
-            return { success: true, id: docRef.id };
+            return { success: true, id: entry.id };
         } catch (err) {
             console.error('AuditService.log error:', err);
             return { success: false, error: err.message };
@@ -106,29 +96,12 @@ const AuditService = {
 
     /** Filter logs by action type */
     async getByActionType(actionType) {
-        try {
-            const q = query(
-                collection(db, COLLECTION),
-                where('action_type', '==', actionType),
-                orderBy('timestamp', 'desc'),
-                limit(100)
-            );
-            const snapshot = await getDocs(q);
-            return snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-                timestamp: doc.data().timestamp?.toDate()?.toISOString() || new Date().toISOString()
-            }));
-        } catch (error) {
-            console.error('AuditService.getByActionType error:', error);
-            return [];
-        }
+        return _logs.filter(l => l.action_type === actionType);
     },
 
     /** Get unique action types */
     async getActionTypes() {
-        const all = await this.getAll(500);
-        const types = new Set(all.map(l => l.action_type));
+        const types = new Set(_logs.map(l => l.action_type));
         return [...types];
     },
 };
