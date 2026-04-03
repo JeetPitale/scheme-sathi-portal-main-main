@@ -84,8 +84,7 @@ export const getUserApplications = async (userId) => {
     try {
         const q = query(
             collection(db, COLLECTION),
-            where("user_id", "==", userId),
-            orderBy("submitted_at", "desc")
+            where("user_id", "==", userId)
         );
         const querySnapshot = await getDocs(q);
 
@@ -103,6 +102,8 @@ export const getUserApplications = async (userId) => {
                 remarks: data.remarks,
             };
         });
+        // Sort so the latest applications pop up at the top
+        mapped.sort((a, b) => new Date(b.dateApplied) - new Date(a.dateApplied));
 
         return { success: true, data: mapped };
     } catch (error) {
