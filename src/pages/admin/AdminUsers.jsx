@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Search, ShieldAlert, ShieldCheck, Eye } from 'lucide-react';
 import AdminLayout from '@/components/Admin/AdminLayout';
 import { useAuthStore, useApplicationStore, useActivityLogStore } from '@/lib/store';
@@ -7,10 +7,15 @@ import Pagination from '@/components/Pagination';
 import { toast } from 'sonner';
 
 const AdminUsers = () => {
-    const getAllUsers = useAuthStore(s => s.getAllUsers);
+    const loadAllUsers = useAuthStore(s => s.loadAllUsers);
+    const users = useAuthStore(s => s.users);
     const toggleUserStatus = useAuthStore(s => s.toggleUserStatus);
     const applications = useApplicationStore(s => s.applications);
     const addLog = useActivityLogStore(s => s.addLog);
+
+    useEffect(() => {
+        loadAllUsers();
+    }, [loadAllUsers]);
 
     const [search, setSearch] = useState('');
     const [filterState, setFilterState] = useState('');
@@ -18,7 +23,6 @@ const AdminUsers = () => {
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(10);
 
-    const users = getAllUsers();
 
     const filtered = useMemo(() => {
         return users.filter(u => {

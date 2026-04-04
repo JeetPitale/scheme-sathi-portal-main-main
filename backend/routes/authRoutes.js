@@ -120,4 +120,57 @@ router.get('/profile', async (req, res) => {
     }
 });
 
+// --- ADMIN ONLY ROUTES ---
+// Helper to verify admin role
+const isAdmin = (role) => ['SUPER_ADMIN', 'CONTENT_ADMIN', 'REVIEW_ADMIN'].includes(role);
+
+// Get all users (Admin Only)
+router.get('/users', async (req, res) => {
+    try {
+        let token;
+        if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+            token = req.headers.authorization.split(' ')[1];
+            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key_123');
+            const admin = await User.findById(decoded.id);
+            
+            if (admin && isAdmin(admin.role)) {
+                // Return all users except yourself and passwords
+                const users = await User.find({ _id: { $ne: admin._id } }).select('-password');
+                const formatted = users.map(u => ({ ...u._doc, id: u._id }));
+                return res.json({ success: true, data: formatted });
+            }
+        }
+        res.status(403).json({ success: false, error: 'Not authorized for this action' });
+    } catch (error) {
+        res.status(401).json({ success: false, error: 'Token Failed' });
+    }
+});
+
+// Toggle User Status (Admin Only)
+router.put('/users/:id/status', async (req, res) => {
+    try {
+        let token;
+        if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+            token = req.headers.authorization.split(' ')[1];
+            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key_123');
+            const admin = await User.findById(decoded.id);
+            
+            if (admin && admin.role === 'SUPER_ADMIN') {
+                const user = await User.findById(req.params.id);
+                if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+                
+                user.status = user.status === 'active' ? 'blocked' : 'active';
+                await user.save();
+                
+                return res.json({ success: true, status: user.status });
+            } else if (admin) {
+              return res.status(403).json({ success: false, error: 'Only Super Admin can block users' });
+            }
+        }
+        res.status(403).json({ success: false, error: 'Not authorized' });
+    } catch (error) {
+        res.status(401).json({ success: false, error: 'Token Failed' });
+    }
+});
+
 export default router;

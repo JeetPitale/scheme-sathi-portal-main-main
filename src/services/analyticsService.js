@@ -86,36 +86,23 @@ const AnalyticsService = {
 
     /**
      * Section 1: KPI Summary Cards
-     * Returns aggregated key performance indicators.
      */
     getKpiSummary(filters = {}) {
         const allApps = useApplicationStore.getState().applications || [];
         const apps = filterApplications(allApps, filters);
-        // Note: UserService.getAllSafe() is also gone. We need a way to get all users.
-        // For now, Analytics might be broken for "all users" if that data isn't in a store.
-        // Assuming useAuthStore doesn't keep ALL users. 
-        // I will return empty array for users to fix the build, identifying this as a limitation or placeholder.
-        const users = []; // getRegularUsers() replacement needs a backend fetch or store.
-
-        // Active users (joined in last 30 days as proxy for "active")
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        const activeUsers = users.filter(u =>
-            u.status === 'active' && u.joinedAt && new Date(u.joinedAt).getTime() >= thirtyDaysAgo.getTime()
-        );
+        const users = useAuthStore.getState().users || [];
 
         const approved = apps.filter(a => a.status === 'approved').length;
         const rejected = apps.filter(a => a.status === 'rejected').length;
         const pending = apps.filter(a => a.status === 'pending').length;
         const total = apps.length;
 
-        // Most applied scheme
-        const schemeCounts = {};
-        apps.forEach(a => {
-            schemeCounts[a.serviceName] = (schemeCounts[a.serviceName] || 0) + 1;
-        });
-        const topScheme = Object.entries(schemeCounts)
-            .sort((a, b) => b[1] - a[1])[0];
+        // Active users (joined in last 30 days)
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const activeUsersCount = users.filter(u =>
+            u.status === 'active' && u.createdAt && new Date(u.createdAt).getTime() >= thirtyDaysAgo.getTime()
+        ).length;
 
         // Average processing time
         const processingTimes = apps.map(getProcessingDays).filter(d => d !== null);
@@ -124,20 +111,18 @@ const AnalyticsService = {
             : 0;
 
         return {
-            totalUsers: users.length,
-            activeUsers: activeUsers.length,
+            totalUsers: users.length || 0,
+            activeUsers: activeUsersCount || 0,
             totalApplications: total,
             approvalRate: total > 0 ? Math.round((approved / total) * 100) : 0,
             rejectionRate: total > 0 ? Math.round((rejected / total) * 100) : 0,
             pendingApplications: pending,
-            mostAppliedScheme: topScheme ? { name: topScheme[0], count: topScheme[1] } : null,
             avgProcessingDays: avgProcessing,
         };
     },
 
     /**
-     * Section 2: Application Trends (line chart data)
-     * Returns monthly application counts.
+     * Section 2: Application Trends
      */
     getApplicationTrends(filters = {}) {
         const allApps = useApplicationStore.getState().applications || [];
@@ -145,7 +130,7 @@ const AnalyticsService = {
         const months = {};
 
         apps.forEach(a => {
-            const d = new Date(a.dateApplied || a.submittedAt); // handle both fields if mapping changed
+            const d = new Date(a.dateApplied || a.createdAt);
             const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
             const label = d.toLocaleString('default', { month: 'short', year: '2-digit' });
             if (!months[key]) months[key] = { key, label, applications: 0, approved: 0, rejected: 0 };
@@ -172,19 +157,64 @@ const AnalyticsService = {
         const allApps = useApplicationStore.getState().applications || [];
         const apps = filterApplications(allApps, filters);
         const schemeMap = {};
-        // ... 
+        apps.forEach(a => {
+            schemeMap[a.serviceName] = (schemeMap[a.serviceName] || 0) + 1;
+        });
+        return Object.entries(schemeMap)
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5);
+    },
+
+    getStateDistribution(filters = {}) {
+        const allApps = useApplicationStore.getState().applications || [];
+        const apps = filterApplications(allApps, filters);
+        const stateMap = {};
+        apps.forEach(a => {
+            const state = a.userState || 'Unknown';
+            stateMap[state] = (stateMap[state] || 0) + 1;
+        });
+        return Object.entries(stateMap)
+            .map(([name, value]) => ({ name, value }))
+            .sort((a, b) => b.value - a.value);
+    },
+
+    getProcessingStats(filters = {}) {
+        const allApps = useApplicationStore.getState().applications || [];
+        const apps = filterApplications(allApps, filters);
+        const times = apps.map(getProcessingDays).filter(t => t !== null);
+        if (!times.length) return { average: 0, min: 0, max: 0 };
+        return {
+            average: Math.round(times.reduce((a, b) => a + b, 0) / times.length),
+            min: Math.min(...times),
+            max: Math.max(...times)
+        };
+    },
+
+    getDropOffStats(filters = {}) {
+        // Mock data as drop-off tracking requires specific session logging
+        return [
+            { stage: 'Started', count: 100 },
+            { stage: 'Documents', count: 75 },
+            { stage: 'Final Review', count: 60 },
+            { stage: 'Submitted', count: 45 }
+        ];
+    },
+
+    getFilterOptions() {
+        const allApps = useApplicationStore.getState().applications || [];
         const schemeOptions = [...new Set(allApps.map(a => a.serviceId))].map(id => {
             const app = allApps.find(a => a.serviceId === id);
             return { value: id, label: app?.serviceName || id };
         });
-
-        // State options placeholders
-        const stateOptions = [];
-
+        const stateOptions = [
+            { value: 'Maharashtra', label: 'Maharashtra' },
+            { value: 'Gujarat', label: 'Gujarat' },
+            { value: 'Delhi', label: 'Delhi' },
+            { value: 'Uttar Pradesh', label: 'Uttar Pradesh' }
+        ];
         return { schemeOptions, stateOptions };
     },
-
-    // ... (Updating other methods to safe defaults/store access)
 };
 
 export default AnalyticsService;

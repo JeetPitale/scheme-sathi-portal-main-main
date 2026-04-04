@@ -12,6 +12,8 @@ import Layout from '@/components/Layout/Layout';
 import { useTranslation, languageNames } from '@/hooks/useTranslation';
 import { useAuthStore } from '@/lib/store';
 import { toast } from 'sonner';
+import { isAdminRole, getRoleLabel, getRoleBadgeClass } from '@/lib/rbac';
+import { ExternalLink } from 'lucide-react';
 
 const Profile = () => {
   const { t } = useTranslation();
@@ -119,8 +121,14 @@ const Profile = () => {
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">{t('profile')}</h1>
-            <p className="text-muted-foreground">Manage your account settings and preferences.</p>
+            <h1 className="text-3xl font-bold tracking-tight">
+              {isAdminRole(user.role) ? 'Admin Profile' : t('profile')}
+            </h1>
+            <p className="text-muted-foreground">
+              {isAdminRole(user.role) 
+                ? 'Manage your account and access administrative tools.' 
+                : 'Manage your account settings and preferences.'}
+            </p>
           </div>
         </div>
 
@@ -128,8 +136,8 @@ const Profile = () => {
 
           {/* LEFT COLUMN: Profile Summary Card */}
           <div className="lg:col-span-1 space-y-6">
-            <Card className="overflow-hidden border-border/50 shadow-sm">
-              <div className="h-32 bg-gradient-to-r from-primary/10 to-primary/5"></div>
+            <Card className={`overflow-hidden border-border/50 shadow-sm ${isAdminRole(user.role) ? 'ring-1 ring-primary/20' : ''}`}>
+              <div className={`h-32 bg-gradient-to-r ${isAdminRole(user.role) ? 'from-primary/20 via-primary/10 to-transparent' : 'from-primary/10 to-primary/5'}`}></div>
               <CardContent className="relative pt-0 text-center pb-8">
                 <Avatar className="h-24 w-24 border-4 border-background shadow-md mx-auto -mt-12 mb-4">
                   <AvatarImage src={user.avatar_url} />
@@ -141,22 +149,40 @@ const Profile = () => {
                 <h2 className="text-xl font-bold mb-1">{displayName}</h2>
                 <p className="text-sm text-muted-foreground mb-4">{user.email}</p>
 
-                <div className="flex justify-center gap-2 mb-6">
-                  <Badge variant="secondary" className="px-3 py-1 font-normal bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                    <Shield className="w-3 h-3 mr-1" /> Verified User
-                  </Badge>
+                <div className="flex flex-wrap justify-center gap-2 mb-6">
+                  {isAdminRole(user.role) ? (
+                    <Badge variant="secondary" className={`px-3 py-1 font-semibold ${getRoleBadgeClass(user.role)}`}>
+                      <Shield className="w-3 h-3 mr-1" /> {getRoleLabel(user.role)}
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="px-3 py-1 font-normal bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                      <Shield className="w-3 h-3 mr-1" /> Verified User
+                    </Badge>
+                  )}
                 </div>
 
                 <div className="text-left text-sm space-y-3 px-2">
                   <div className="flex justify-between py-2 border-b">
                     <span className="text-muted-foreground">Role</span>
-                    <span className="font-medium capitalize">{user.role || 'User'}</span>
+                    <span className={`font-medium ${isAdminRole(user.role) ? 'text-primary' : ''}`}>
+                      {getRoleLabel(user.role)}
+                    </span>
                   </div>
                   <div className="flex justify-between py-2 border-b">
                     <span className="text-muted-foreground">Member Since</span>
                     <span className="font-medium">{new Date().getFullYear()}</span>
                   </div>
                 </div>
+
+                {isAdminRole(user.role) && (
+                  <div className="mt-6">
+                    <Link to="/admin">
+                      <Button variant="outline" className="w-full gap-2 border-primary/20 hover:bg-primary/5 text-primary">
+                        <ExternalLink className="h-4 w-4" /> Go to Admin Portal
+                      </Button>
+                    </Link>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -164,7 +190,7 @@ const Profile = () => {
           {/* RIGHT COLUMN: Tabs Content */}
           <div className="lg:col-span-2">
             <Tabs defaultValue="personal" className="w-full">
-              <TabsList className="grid w-full grid-cols-3 mb-6 h-12">
+              <TabsList className={`grid w-full mb-6 h-12 ${isAdminRole(user.role) ? 'grid-cols-4' : 'grid-cols-3'}`}>
                 <TabsTrigger value="personal" className="gap-2">
                   <User className="h-4 w-4" /> <span className="hidden sm:inline">Personal Info</span>
                 </TabsTrigger>
@@ -174,6 +200,11 @@ const Profile = () => {
                 <TabsTrigger value="preferences" className="gap-2">
                   <Globe className="h-4 w-4" /> <span className="hidden sm:inline">Preferences</span>
                 </TabsTrigger>
+                {isAdminRole(user.role) && (
+                  <TabsTrigger value="admin" className="gap-2 text-primary font-bold">
+                    <Shield className="h-4 w-4" /> <span className="hidden sm:inline">Control Center</span>
+                  </TabsTrigger>
+                )}
               </TabsList>
 
               {/* TAB 1: Personal Info */}
@@ -336,6 +367,48 @@ const Profile = () => {
                 </Card>
               </TabsContent>
 
+              {/* TAB 4: Admin Control Center */}
+              {isAdminRole(user.role) && (
+                <TabsContent value="admin">
+                  <Card className="border-primary/20 shadow-sm overflow-hidden bg-primary/[0.02]">
+                    <CardHeader className="bg-primary/5">
+                      <CardTitle className="text-primary flex items-center gap-2 text-xl font-bold">
+                        <Shield className="h-5 w-5" /> Administrative Control Center
+                      </CardTitle>
+                      <CardDescription className="font-medium text-slate-600">
+                        Quick access to important site management sections.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="pt-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {[
+                          { to: '/admin', label: 'Management Dashboard', desc: 'Main administrative overview and analytics summary.', icon: 'LayoutDashboard' },
+                          { to: '/admin/schemes', label: 'Scheme Management', desc: 'Create, edit, or remove government schemes.', icon: 'FileText' },
+                          { to: '/admin/applications', label: 'Application Reviews', desc: 'Review and process incoming user applications.', icon: 'ClipboardList' },
+                          { to: '/admin/users', label: 'User Directory', desc: 'Manage registered users and staff permissions.', icon: 'Users' }
+                        ].map((item) => (
+                          <Link key={item.to} to={item.to}>
+                            <div className="p-4 rounded-xl border bg-card hover:bg-primary/5 hover:border-primary/30 transition-all group flex items-start gap-4">
+                              <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:scale-110 transition-transform">
+                                <ExternalLink className="h-5 w-5" />
+                              </div>
+                              <div>
+                                <h4 className="font-bold text-slate-800">{item.label}</h4>
+                                <p className="text-xs text-muted-foreground leading-relaxed mt-1">{item.desc}</p>
+                              </div>
+                            </div>
+                          </Link>
+                        ))}
+                      </div>
+                      <div className="mt-8 p-4 rounded-lg bg-slate-100 dark:bg-slate-900 border text-center">
+                        <p className="text-xs text-muted-foreground flex items-center justify-center gap-1">
+                          <Lock className="h-3 w-3" /> Note: Only users with <strong>{getRoleLabel(user.role)}</strong> privileges can access this tab.
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              )}
             </Tabs>
           </div>
         </div>

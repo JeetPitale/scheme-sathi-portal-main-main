@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Shield } from 'lucide-react';
 import AdminLayout from '@/components/Admin/AdminLayout';
 import { useAuthStore } from '@/lib/store';
@@ -9,15 +9,25 @@ import Pagination from '@/components/Pagination';
 import { toast } from 'sonner';
 
 const AdminRoles = () => {
-    const { user, getAdminUsers, updateUserRole } = useAuthStore();
+    const { user, getAdminUsers, loadAdminUsers, updateUserRole } = useAuthStore();
     const { logAction } = useAuditStore();
     const admins = getAdminUsers();
     const [page, setPage] = useState(1);
     const [limit, setLimit] = useState(10);
     const [editingId, setEditingId] = useState(null);
     const [newRole, setNewRole] = useState('');
+    const [isLoading, setIsLoading] = useState(!admins.length);
 
-    const paged = useMemo(() => paginate(admins, page, limit), [admins, page, limit]);
+    useEffect(() => {
+        const load = async () => {
+            setIsLoading(true);
+            await loadAdminUsers();
+            setIsLoading(false);
+        };
+        load();
+    }, []);
+
+    const paged = useMemo(() => paginate(admins || [], page, limit), [admins, page, limit]);
 
     // Check permission
     if (!hasPermission(user?.role, ACTIONS.MANAGE_ROLES)) {
@@ -104,65 +114,73 @@ const AdminRoles = () => {
 
                 {/* Admin Users Table */}
                 <div className="admin-card">
-                    <h2 className="admin-card-title mb-4">Admin Users ({admins.length})</h2>
-                    <div className="admin-table-wrap">
-                        <table className="admin-table">
-                            <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Email</th>
-                                    <th>Current Role</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {paged.items.map(a => (
-                                    <tr key={a.id}>
-                                        <td className="font-medium">{a.fullName}</td>
-                                        <td className="text-sm text-muted-foreground">{a.email}</td>
-                                        <td>
-                                            <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${getRoleBadgeClass(a.role)}`}>
-                                                {getRoleLabel(a.role)}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            {editingId === a.id ? (
-                                                <div className="flex items-center gap-2">
-                                                    <select
-                                                        value={newRole}
-                                                        onChange={e => setNewRole(e.target.value)}
-                                                        className="admin-select text-sm"
-                                                    >
-                                                        {ADMIN_ROLES.map(r => (
-                                                            <option key={r} value={r}>{getRoleLabel(r)}</option>
-                                                        ))}
-                                                    </select>
-                                                    <button onClick={() => handleRoleChange(a)} className="admin-btn admin-btn-primary text-xs">Save</button>
-                                                    <button onClick={() => setEditingId(null)} className="admin-btn text-xs">Cancel</button>
-                                                </div>
-                                            ) : (
-                                                <button
-                                                    onClick={() => startEdit(a)}
-                                                    disabled={a.id === user.id}
-                                                    className="admin-btn text-xs disabled:opacity-40"
-                                                >
-                                                    {a.id === user.id ? 'Current User' : 'Change Role'}
-                                                </button>
-                                            )}
-                                        </td>
+                    <h2 className="admin-card-title mb-4">Admin Users ({admins?.length || 0})</h2>
+                    {isLoading ? (
+                        <div className="flex items-center justify-center p-8">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                        </div>
+                    ) : (
+                        <div className="admin-table-wrap">
+                            <table className="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Email</th>
+                                        <th>Current Role</th>
+                                        <th>Actions</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                    <Pagination
-                        page={paged.page}
-                        totalPages={paged.totalPages}
-                        totalItems={paged.totalItems}
-                        limit={paged.limit}
-                        onPageChange={(p) => setPage(p)}
-                        onLimitChange={(l) => { setLimit(l); setPage(1); }}
-                    />
+                                </thead>
+                                <tbody>
+                                    {paged.items.map(a => (
+                                        <tr key={a.id}>
+                                            <td className="font-medium">{a.fullName}</td>
+                                            <td className="text-sm text-muted-foreground">{a.email}</td>
+                                            <td>
+                                                <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${getRoleBadgeClass(a.role)}`}>
+                                                    {getRoleLabel(a.role)}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                {editingId === a.id ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <select
+                                                            value={newRole}
+                                                            onChange={e => setNewRole(e.target.value)}
+                                                            className="admin-select text-sm"
+                                                        >
+                                                            {ADMIN_ROLES.map(r => (
+                                                                <option key={r} value={r}>{getRoleLabel(r)}</option>
+                                                            ))}
+                                                        </select>
+                                                        <button onClick={() => handleRoleChange(a)} className="admin-btn admin-btn-primary text-xs">Save</button>
+                                                        <button onClick={() => setEditingId(null)} className="admin-btn text-xs">Cancel</button>
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => startEdit(a)}
+                                                        disabled={a.id === user.id}
+                                                        className="admin-btn text-xs disabled:opacity-40"
+                                                    >
+                                                        {a.id === user.id ? 'Current User' : 'Change Role'}
+                                                    </button>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                    {!isLoading && (
+                        <Pagination
+                            page={paged.page}
+                            totalPages={paged.totalPages}
+                            totalItems={paged.totalItems}
+                            limit={paged.limit}
+                            onPageChange={(p) => setPage(p)}
+                            onLimitChange={(l) => { setLimit(l); setPage(1); }}
+                        />
+                    )}
                 </div>
             </div>
         </AdminLayout>

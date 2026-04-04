@@ -40,6 +40,10 @@ export const useAuthStore = create()(persist((set, get) => ({
     isAuthChecking: true,
     language: 'en',
     session: null, // holds token
+    users: [],
+    adminUsers: [], // for admin management
+    usersLoaded: false,
+    adminUsersLoaded: false,
 
     setUser: (user) => set({ user, isAuthenticated: !!user }),
 
@@ -113,7 +117,7 @@ export const useAuthStore = create()(persist((set, get) => ({
         const user = get().user;
         if (user) {
             try {
-                // To be implemented in MongoDB
+                // In MongoDB we'd call an API here
                 set({ user: { ...user, ...data } });
                 return { success: true };
             } catch (err) {
@@ -139,16 +143,67 @@ export const useAuthStore = create()(persist((set, get) => ({
     adminLogout: () => get().logout(),
 
     // ── Admin user management ──
-    getAllUsers: async () => {
-        return []; // To be implemented in MongoDB User Routes
+    getAllUsers: () => get().users,
+
+    loadAllUsers: async () => {
+        const token = get().session?.token;
+        if (!token) return;
+
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001/api'}/auth/users`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            if (data.success) {
+                set({ users: data.data, usersLoaded: true });
+            }
+        } catch (err) {
+            console.error('Failed to load users:', err);
+        }
     },
 
-    getAdminUsers: async () => {
-        return [];
+    getAdminUsers: () => {
+        return get().adminUsers;
+    },
+
+    loadAdminUsers: async () => {
+        const token = get().session?.token;
+        if (!token) return;
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001/api'}/auth/users`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            if (data.success) {
+                const admins = data.data.filter(u => ['SUPER_ADMIN', 'CONTENT_ADMIN', 'REVIEW_ADMIN'].includes(u.role));
+                set({ adminUsers: admins });
+            }
+        } catch (err) {
+            console.error('Failed to load admin users:', err);
+        }
     },
 
     toggleUserStatus: async (userId) => {
-        return { success: false, error: "Not implemented in MongoDB yet" };
+        const token = get().session?.token;
+        if (!token) return { success: false, error: 'No token' };
+
+        try {
+            const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001/api'}/auth/users/${userId}/status`, {
+                method: 'PUT',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            if (data.success) {
+                // Update local state
+                set(s => ({
+                    users: s.users.map(u => u.id === userId ? { ...u, status: data.status } : u)
+                }));
+                return { success: true };
+            }
+            return { success: false, error: data.error };
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
     },
 
     updateUserRole: async (userId, newRole) => {
