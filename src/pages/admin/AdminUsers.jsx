@@ -84,7 +84,7 @@ const AdminUsers = () => {
                                         <td className="font-medium">{u.fullName || u.full_name || u.email || '—'}</td>
                                         <td className="text-sm text-muted-foreground">{u.email}</td>
                                         <td>{u.mobile}</td>
-                                        <td className="capitalize">{u.state?.replace(/-/g, ' ') || '—'}</td>
+                                        <td className="capitalize">{(u.profile?.state || u.state || '—').replace(/-/g, ' ')}</td>
                                         <td>{getAppCount(u.id)}</td>
                                         <td>
                                             <span className={`admin-badge ${u.status === 'active' ? 'badge-success' : 'badge-danger'}`}>
@@ -130,7 +130,7 @@ const AdminUsers = () => {
                                 <div className="flex justify-between"><span className="text-muted-foreground">Name</span><span className="font-medium">{selectedUser.fullName || selectedUser.full_name || selectedUser.email || '—'}</span></div>
                                 <div className="flex justify-between"><span className="text-muted-foreground">Email</span><span>{selectedUser.email}</span></div>
                                 <div className="flex justify-between"><span className="text-muted-foreground">Mobile</span><span>{selectedUser.mobile}</span></div>
-                                <div className="flex justify-between"><span className="text-muted-foreground">State</span><span className="capitalize">{selectedUser.state?.replace(/-/g, ' ')}</span></div>
+                                <div className="flex justify-between"><span className="text-muted-foreground">State</span><span className="capitalize">{((selectedUser.profile?.state || selectedUser.state || '—').replace(/-/g, ' '))}</span></div>
                                 <div className="flex justify-between"><span className="text-muted-foreground">Status</span>
                                     <span className={`admin-badge ${selectedUser.status === 'active' ? 'badge-success' : 'badge-danger'}`}>{selectedUser.status}</span>
                                 </div>
