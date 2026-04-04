@@ -89,10 +89,10 @@ const App = () => {
     loadSchemes();
     
     // Initialize auth state listener from our local store
-    const unsubscribe = initAuthListener();
+    initAuthListener();
 
     return () => {
-      if (unsubscribe) unsubscribe();
+      // No cleanup needed for async initialization
     };
   }, [initTheme, initAuthListener, loadSchemes]);
 

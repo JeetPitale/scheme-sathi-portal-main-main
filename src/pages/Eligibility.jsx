@@ -167,7 +167,7 @@ const Eligibility = () => {
                                                 <div className="text-sm">
                                                     <span className="text-slate-400 font-medium uppercase tracking-wider text-[10px] block mb-1">Primary Benefit</span>
                                                     <p className="text-slate-700 font-medium line-clamp-1 italic">
-                                                        {typeof scheme.benefits === 'object' 
+                                                        {scheme.benefits && typeof scheme.benefits === 'object' 
                                                             ? (scheme.benefits.financial_assistance || scheme.benefits.non_financial_support || "Check details for benefits")
                                                             : (scheme.benefits || "Consult scheme guidelines for full list of benefits")}
                                                     </p>

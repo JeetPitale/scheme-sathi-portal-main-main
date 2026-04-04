@@ -213,9 +213,9 @@ const SchemeDetail = () => {
                                 <div className="bg-muted/50 rounded-lg p-3">
                                     <p className="text-xs text-muted-foreground mb-1 font-bold">{t('eligibility')}</p>
                                     <p className="text-sm font-medium text-foreground">
-                                        {typeof scheme.eligibility === 'object' 
+                                        {scheme.eligibility && typeof scheme.eligibility === 'object' 
                                             ? `Age: ${scheme.eligibility.minAge || 0}+, Categories: ${(scheme.eligibility.categories || []).join(', ')}`
-                                            : scheme.eligibility}
+                                            : (scheme.eligibility || "Check criteria")}
                                     </p>
                                 </div>
                             )}
