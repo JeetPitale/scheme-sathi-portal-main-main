@@ -4,7 +4,7 @@
  */
 
 // We assume the backend is running on port 5001. In production, this should be an environment variable.
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 /**
  * Creates a new application in MongoDB Backend

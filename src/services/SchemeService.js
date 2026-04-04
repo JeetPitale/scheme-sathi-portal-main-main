@@ -3,7 +3,7 @@
  * Backed by Node.js/MongoDB REST API
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 const getApiUrl = () => API_URL;
 
 let _cache = null;

@@ -150,7 +150,7 @@ export const useAuthStore = create()(persist((set, get) => ({
         if (!token) return;
 
         try {
-            const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001/api'}/auth/users`, {
+            const res = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/auth/users`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const data = await res.json();
@@ -170,7 +170,7 @@ export const useAuthStore = create()(persist((set, get) => ({
         const token = get().session?.token;
         if (!token) return;
         try {
-            const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001/api'}/auth/users`, {
+            const res = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/auth/users`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const data = await res.json();
@@ -188,7 +188,7 @@ export const useAuthStore = create()(persist((set, get) => ({
         if (!token) return { success: false, error: 'No token' };
 
         try {
-            const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001/api'}/auth/users/${userId}/status`, {
+            const res = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/auth/users/${userId}/status`, {
                 method: 'PUT',
                 headers: { 'Authorization': `Bearer ${token}` }
             });
